@@ -1,0 +1,719 @@
+
+const CONFIG = {
+
+  GOOGLE_SHEETS_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmt2xY2g29WLrKdh1CUbTUA2dL_D_AD_5O2N42mFQSMM5wrhqs5m6Z7FYNJs0NjrLwD2I1imA_ke2K/pub?gid=0&single=true&output=csv",
+  GOOGLE_SHEET_GID: "0",
+
+  CITY_COLUMN_NAME: "Cidade",
+
+  COUNT_COLUMN_NAME: "",
+
+  MUNICIPALITIES_GEOJSON_URL: "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-21-mun.json",
+
+  PAGE_SIZE: 10,
+};
+
+const SAMPLE_ROWS = [
+  { Cidade: "São Luís" },
+  ...Array.from({ length: 99 }, () => ({ Cidade: "Sao Luis" })),
+  ...Array.from({ length: 35 }, () => ({ Cidade: "Pinheiro" })),
+  ...Array.from({ length: 30 }, () => ({ Cidade: "Imperatriz" })),
+  ...Array.from({ length: 25 }, () => ({ Cidade: "Codó" })),
+  ...Array.from({ length: 20 }, () => ({ Cidade: "Caxias" })),
+  ...Array.from({ length: 18 }, () => ({ Cidade: "Santa Ines" })),
+  ...Array.from({ length: 12 }, () => ({ Cidade: "Chapadinha" })),
+  ...Array.from({ length: 11 }, () => ({ Cidade: "Barra do Corda" })),
+  ...Array.from({ length: 9 }, () => ({ Cidade: "Balsas" })),
+  ...Array.from({ length: 8 }, () => ({ Cidade: "Tutoia" })),
+  ...Array.from({ length: 7 }, () => ({ Cidade: "Zé Doca" })),
+];
+
+const FALLBACK_CITY_COORDS = {
+  "sao luis": { name: "São Luís", lat: -2.5307, lng: -44.3068 },
+  "pinheiro": { name: "Pinheiro", lat: -2.5222, lng: -45.0788 },
+  "imperatriz": { name: "Imperatriz", lat: -5.5264, lng: -47.4919 },
+  "codo": { name: "Codó", lat: -4.4556, lng: -43.8856 },
+  "caxias": { name: "Caxias", lat: -4.8589, lng: -43.3561 },
+  "santa ines": { name: "Santa Inês", lat: -3.6667, lng: -45.3800 },
+  "chapadinha": { name: "Chapadinha", lat: -3.7417, lng: -43.3603 },
+  "barra do corda": { name: "Barra do Corda", lat: -5.5056, lng: -45.2433 },
+  "balsas": { name: "Balsas", lat: -7.5325, lng: -46.0356 },
+  "tutoia": { name: "Tutóia", lat: -2.7619, lng: -42.2744 },
+  "ze doca": { name: "Zé Doca", lat: -3.2700, lng: -45.6550 },
+};
+
+const ALIASES = {
+  "sao luiz": "sao luis",
+  "s luiz": "sao luis",
+  "s luis": "sao luis",
+  "slz": "sao luis",
+  "tutoia": "tutoia",
+  "presidente dutra ma": "presidente dutra",
+  "santa ines ma": "santa ines",
+};
+
+const state = {
+  map: null,
+  markersLayer: null,
+  boundaryLayer: null,
+  cityIndex: new Map(),
+  allCities: [],
+  filteredCities: [],
+  markers: new Map(),
+  activeCityKey: null,
+  sortDirection: "desc",
+  page: 1,
+  search: "",
+};
+
+const els = {
+  status: document.getElementById("dashboard-status"),
+  tableBody: document.getElementById("city-table-body"),
+  search: document.getElementById("city-search"),
+  sortButton: document.getElementById("sort-button"),
+  sortIcon: document.getElementById("sort-icon"),
+  paginationInfo: document.getElementById("pagination-info"),
+  prevPage: document.getElementById("prev-page"),
+  nextPage: document.getElementById("next-page"),
+  pageNumbers: document.getElementById("page-numbers"),
+  exportToggle: document.getElementById("export-toggle"),
+  exportOptions: document.getElementById("export-options"),
+};
+
+window.addEventListener("DOMContentLoaded", init);
+
+async function init() {
+  setupMap();
+  setupEvents();
+
+  try {
+    const geojson = await loadMunicipalitiesGeoJson();
+    buildCityIndex(geojson);
+    drawBoundary(geojson);
+
+    const rows = await loadRowsFromGoogleSheets();
+    const { cities, unmatched } = aggregateRowsByCity(rows);
+
+    state.allCities = cities;
+    state.filteredCities = cities;
+
+    renderMarkers();
+    applyFiltersAndRender();
+    fitMapToMarkers();
+    forceMapResize();
+
+    /*if (unmatched.length > 0) {
+      const preview = unmatched.slice(0, 5).join(", ");
+      setStatus(`${unmatched.length} cidade(s) não localizada(s) após normalização: ${preview}${unmatched.length > 5 ? "..." : ""}`);
+      console.warn("Cidades não localizadas:", unmatched);
+    }*/
+  } catch (error) {
+    console.error(error);
+    setStatus("Não foi possível carregar os dados. Confira o link da planilha e a publicação como CSV.");
+    els.tableBody.innerHTML = `<tr><td colspan="3" class="empty-state">Erro ao carregar os dados.</td></tr>`;
+  }
+}
+
+function setupMap() {
+  state.map = L.map("map", {
+    zoomControl: true,
+    scrollWheelZoom: true,
+    attributionControl: true,
+  }).setView([-4.8, -45.1], 7);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(state.map);
+
+  state.markersLayer = L.layerGroup().addTo(state.map);
+
+  const HomeControl = L.Control.extend({
+    options: { position: "topleft" },
+    onAdd() {
+      const container = L.DomUtil.create("a", "home-control leaflet-bar-part");
+      container.href = "#";
+      container.title = "Centralizar mapa";
+      container.setAttribute("aria-label", "Centralizar mapa");
+      container.innerHTML = `
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M12 3.2 3 11.1l1.32 1.5L6 11.13V20h5v-5h2v5h5v-8.87l1.68 1.47L21 11.1 12 3.2Z"/>
+        </svg>
+      `;
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.on(container, "click", (event) => {
+        L.DomEvent.preventDefault(event);
+        fitMapToMarkers();
+      });
+      return container;
+    },
+  });
+
+  state.map.addControl(new HomeControl());
+
+  // Corrige o problema de tiles quebrados quando o Leaflet é renderizado
+  // antes do navegador terminar de calcular o tamanho real do container.
+  forceMapResize();
+  window.addEventListener("load", forceMapResize);
+  window.addEventListener("resize", debounce(forceMapResize, 120));
+}
+
+
+function forceMapResize() {
+  if (!state.map) return;
+
+  requestAnimationFrame(() => {
+    state.map.invalidateSize({ animate: false });
+
+    setTimeout(() => {
+      state.map.invalidateSize({ animate: false });
+    }, 180);
+  });
+}
+
+function debounce(callback, delay = 120) {
+  let timer;
+  return (...args) => {
+    clearTimeout(timer);
+    timer = setTimeout(() => callback(...args), delay);
+  };
+}
+
+function setupEvents() {
+  els.search.addEventListener("input", () => {
+    state.search = els.search.value;
+    state.page = 1;
+    applyFiltersAndRender();
+  });
+
+  els.sortButton.addEventListener("click", () => {
+    state.sortDirection = state.sortDirection === "desc" ? "asc" : "desc";
+    state.page = 1;
+    applyFiltersAndRender();
+  });
+
+  els.prevPage.addEventListener("click", () => {
+    if (state.page > 1) {
+      state.page -= 1;
+      renderTable();
+    }
+  });
+
+  els.nextPage.addEventListener("click", () => {
+    const totalPages = getTotalPages();
+    if (state.page < totalPages) {
+      state.page += 1;
+      renderTable();
+    }
+  });
+
+  els.exportToggle.addEventListener("click", () => {
+    const expanded = els.exportToggle.getAttribute("aria-expanded") === "true";
+    els.exportToggle.setAttribute("aria-expanded", String(!expanded));
+    els.exportOptions.hidden = expanded;
+  });
+
+  document.addEventListener("click", (event) => {
+    if (!event.target.closest(".export-menu")) {
+      els.exportToggle.setAttribute("aria-expanded", "false");
+      els.exportOptions.hidden = true;
+    }
+  });
+
+  els.exportOptions.addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-export]");
+    if (!button) return;
+
+    exportData(button.dataset.export);
+    els.exportToggle.setAttribute("aria-expanded", "false");
+    els.exportOptions.hidden = true;
+  });
+}
+
+async function loadMunicipalitiesGeoJson() {
+  try {
+    const response = await fetch(CONFIG.MUNICIPALITIES_GEOJSON_URL);
+    if (!response.ok) throw new Error("Falha ao carregar GeoJSON dos municípios.");
+    return response.json();
+  } catch (error) {
+    console.warn("Usando coordenadas fallback. Motivo:", error);
+    return null;
+  }
+}
+
+function buildCityIndex(geojson) {
+  state.cityIndex.clear();
+
+  if (geojson?.features?.length) {
+    geojson.features.forEach((feature) => {
+      const name = getCityNameFromFeature(feature);
+      if (!name) return;
+
+      const center = getFeatureCenter(feature);
+      if (!center) return;
+
+      const key = normalizeCityName(name);
+      state.cityIndex.set(key, { name, lat: center.lat, lng: center.lng, feature });
+    });
+  }
+
+  Object.entries(FALLBACK_CITY_COORDS).forEach(([key, value]) => {
+    if (!state.cityIndex.has(key)) {
+      state.cityIndex.set(key, value);
+    }
+  });
+}
+
+function drawBoundary(geojson) {
+  if (!geojson?.features?.length) return;
+
+  state.boundaryLayer = L.geoJSON(geojson, {
+    interactive: false,
+    style: {
+      color: "#64748b",
+      weight: 0.7,
+      opacity: 0.25,
+      fillColor: "#ffffff",
+      fillOpacity: 0,
+    },
+  }).addTo(state.map);
+}
+
+function getCityNameFromFeature(feature) {
+  const properties = feature?.properties || {};
+  return properties.name
+    || properties.NM_MUN
+    || properties.NM_MUNICIP
+    || properties.municipio
+    || properties.MUNICIPIO
+    || properties.nome
+    || properties.NOME
+    || "";
+}
+
+function getFeatureCenter(feature) {
+  try {
+    const layer = L.geoJSON(feature);
+    const center = layer.getBounds().getCenter();
+    if (!Number.isFinite(center.lat) || !Number.isFinite(center.lng)) return null;
+    return center;
+  } catch {
+    return null;
+  }
+}
+
+async function loadRowsFromGoogleSheets() {
+  if (!CONFIG.GOOGLE_SHEETS_URL.trim()) {
+    setStatus("Usando dados de demonstração. Cole o link da sua planilha em CONFIG.GOOGLE_SHEETS_URL no arquivo script.js.");
+    return SAMPLE_ROWS;
+  }
+
+  const csvUrl = normalizeGoogleSheetsUrl(CONFIG.GOOGLE_SHEETS_URL, CONFIG.GOOGLE_SHEET_GID);
+  const response = await fetch(csvUrl);
+  if (!response.ok) {
+    throw new Error(`Falha ao carregar CSV: ${response.status}`);
+  }
+
+  const text = await response.text();
+  return csvToObjects(text);
+}
+
+function normalizeGoogleSheetsUrl(url, gid = "0") {
+  const trimmed = url.trim();
+
+  if (/output=csv|tqx=out:csv|format=csv/i.test(trimmed)) {
+    return trimmed;
+  }
+
+  const match = trimmed.match(/\/spreadsheets\/d\/([a-zA-Z0-9-_]+)/);
+  if (match?.[1]) {
+    return `https://docs.google.com/spreadsheets/d/${match[1]}/gviz/tq?tqx=out:csv&gid=${encodeURIComponent(gid)}`;
+  }
+
+  return trimmed;
+}
+
+function csvToObjects(csvText) {
+  const rows = parseCSV(csvText).filter((row) => row.some((cell) => String(cell).trim() !== ""));
+  if (rows.length <= 1) return [];
+
+  const headers = rows[0].map((header) => String(header).trim());
+
+  return rows.slice(1).map((row) => {
+    const item = {};
+    headers.forEach((header, index) => {
+      item[header] = row[index] ?? "";
+    });
+    return item;
+  });
+}
+
+function parseCSV(text) {
+  const rows = [];
+  let currentRow = [];
+  let currentCell = "";
+  let insideQuotes = false;
+
+  for (let i = 0; i < text.length; i += 1) {
+    const char = text[i];
+    const next = text[i + 1];
+
+    if (char === '"') {
+      if (insideQuotes && next === '"') {
+        currentCell += '"';
+        i += 1;
+      } else {
+        insideQuotes = !insideQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !insideQuotes) {
+      currentRow.push(currentCell);
+      currentCell = "";
+      continue;
+    }
+
+    if ((char === "\n" || char === "\r") && !insideQuotes) {
+      if (char === "\r" && next === "\n") i += 1;
+      currentRow.push(currentCell);
+      rows.push(currentRow);
+      currentRow = [];
+      currentCell = "";
+      continue;
+    }
+
+    currentCell += char;
+  }
+
+  currentRow.push(currentCell);
+  rows.push(currentRow);
+  return rows;
+}
+
+function aggregateRowsByCity(rows) {
+  const cityHeader = findHeader(rows, CONFIG.CITY_COLUMN_NAME);
+  const countHeader = CONFIG.COUNT_COLUMN_NAME ? findHeader(rows, CONFIG.COUNT_COLUMN_NAME) : null;
+  const totals = new Map();
+  const unmatched = new Set();
+
+  rows.forEach((row) => {
+    const rawCity = cityHeader ? row[cityHeader] : Object.values(row)[0];
+    const normalizedCity = normalizeCityName(rawCity);
+    if (!normalizedCity) return;
+
+    const canonicalKey = ALIASES[normalizedCity] || normalizedCity;
+    const cityInfo = state.cityIndex.get(canonicalKey);
+
+    if (!cityInfo) {
+      unmatched.add(String(rawCity).trim());
+      return;
+    }
+
+    const increment = countHeader ? parseCount(row[countHeader]) : 1;
+    const existing = totals.get(canonicalKey) || {
+      key: canonicalKey,
+      city: cityInfo.name,
+      lat: cityInfo.lat,
+      lng: cityInfo.lng,
+      count: 0,
+    };
+
+    existing.count += increment;
+    totals.set(canonicalKey, existing);
+  });
+
+  const cities = Array.from(totals.values())
+    .filter((item) => item.count > 0)
+    .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city, "pt-BR"));
+
+  return { cities, unmatched: Array.from(unmatched) };
+}
+
+function findHeader(rows, expectedHeader) {
+  if (!rows.length) return null;
+
+  const sample = rows[0];
+  const headers = Object.keys(sample);
+  const expected = normalizeLoose(expectedHeader);
+
+  return headers.find((header) => normalizeLoose(header) === expected) || null;
+}
+
+function parseCount(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+
+  const clean = String(value ?? "")
+    .trim()
+    .replace(/\./g, "")
+    .replace(",", ".")
+    .replace(/[^0-9.-]/g, "");
+
+  const parsed = Number(clean);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+}
+
+function normalizeCityName(value) {
+  let normalized = normalizeLoose(value);
+
+  normalized = normalized
+    .replace(/\b(estado do maranhao|maranhao|brasil)\b/g, " ")
+    .replace(/\bma\b/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  return ALIASES[normalized] || normalized;
+}
+
+function normalizeLoose(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .replace(/[’']/g, "")
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function getBucket(count) {
+  if (count >= 80) return "danger";
+  if (count >= 30) return "warning";
+  if (count >= 10) return "notice";
+  return "success";
+}
+
+function getBubbleSize(count) {
+  const size = 30 + Math.log10(count + 1) * 18;
+  return Math.max(34, Math.min(62, Math.round(size)));
+}
+
+function renderMarkers() {
+  state.markersLayer.clearLayers();
+  state.markers.clear();
+
+  state.allCities.forEach((item) => {
+    const bucket = getBucket(item.count);
+    const size = getBubbleSize(item.count);
+
+    const icon = L.divIcon({
+      className: "city-div-icon",
+      html: `
+        <div class="city-marker" data-city-key="${escapeAttribute(item.key)}">
+          <div class="bubble ${bucket}" style="width:${size}px;height:${size}px;font-size:${size >= 52 ? 1.03 : 0.94}rem">
+            ${formatNumber(item.count)}
+          </div>
+          <div class="city-label">${escapeHtml(item.city)}</div>
+        </div>
+      `,
+      iconSize: [1, 1],
+      iconAnchor: [0, 0],
+    });
+
+    const marker = L.marker([item.lat, item.lng], { icon })
+      .bindTooltip(`<strong>${escapeHtml(item.city)}</strong><br>${formatNumber(item.count)} ocorrência(s)`, {
+        direction: "top",
+        offset: [0, -20],
+        opacity: 0.95,
+      })
+      .on("click", () => selectCity(item.key, true));
+
+    marker.addTo(state.markersLayer);
+    state.markers.set(item.key, marker);
+  });
+}
+
+function applyFiltersAndRender() {
+  const search = normalizeLoose(state.search);
+
+  state.filteredCities = state.allCities
+    .filter((item) => !search || normalizeLoose(item.city).includes(search))
+    .sort((a, b) => {
+      const byCount = state.sortDirection === "desc" ? b.count - a.count : a.count - b.count;
+      return byCount || a.city.localeCompare(b.city, "pt-BR");
+    });
+
+  els.sortIcon.textContent = state.sortDirection === "desc" ? "⌄" : "⌃";
+
+  const totalPages = getTotalPages();
+  if (state.page > totalPages) state.page = totalPages;
+
+  renderTable();
+}
+
+function renderTable() {
+  const total = state.filteredCities.length;
+  const totalPages = getTotalPages();
+  const startIndex = (state.page - 1) * CONFIG.PAGE_SIZE;
+  const pageItems = state.filteredCities.slice(startIndex, startIndex + CONFIG.PAGE_SIZE);
+
+  if (pageItems.length === 0) {
+    els.tableBody.innerHTML = `<tr><td colspan="3" class="empty-state">Nenhuma cidade encontrada.</td></tr>`;
+  } else {
+    els.tableBody.innerHTML = pageItems.map((item, index) => {
+      const bucket = getBucket(item.count);
+      const rank = startIndex + index + 1;
+      const activeClass = state.activeCityKey === item.key ? "active-row" : "";
+
+      return `
+        <tr class="${activeClass}" data-city-key="${escapeAttribute(item.key)}">
+          <td class="rank-column">${rank}.</td>
+          <td>
+            <div class="city-cell">
+              <span class="city-dot ${bucket}" aria-hidden="true"></span>
+              <span>${escapeHtml(item.city)}</span>
+            </div>
+          </td>
+          <td class="count-cell ${bucket}">${formatNumber(item.count)}</td>
+        </tr>
+      `;
+    }).join("");
+  }
+
+  els.tableBody.querySelectorAll("tr[data-city-key]").forEach((row) => {
+    row.addEventListener("click", () => selectCity(row.dataset.cityKey, true));
+  });
+
+  const endIndex = Math.min(startIndex + pageItems.length, total);
+  els.paginationInfo.textContent = total > 0
+    ? `Mostrando ${startIndex + 1} a ${endIndex} de ${total} cidades`
+    : "Mostrando 0 cidades";
+
+  renderPagination(totalPages);
+}
+
+function renderPagination(totalPages) {
+  els.prevPage.disabled = state.page <= 1;
+  els.nextPage.disabled = state.page >= totalPages;
+
+  const pages = buildVisiblePages(state.page, totalPages);
+  els.pageNumbers.innerHTML = pages.map((page) => {
+    if (page === "...") return `<span class="page-ellipsis">...</span>`;
+    return `<button type="button" class="page-number ${page === state.page ? "active" : ""}" data-page="${page}">${page}</button>`;
+  }).join("");
+
+  els.pageNumbers.querySelectorAll("button[data-page]").forEach((button) => {
+    button.addEventListener("click", () => {
+      state.page = Number(button.dataset.page);
+      renderTable();
+    });
+  });
+}
+
+function buildVisiblePages(current, total) {
+  if (total <= 5) return Array.from({ length: total }, (_, index) => index + 1);
+
+  const pages = new Set([1, total, current, current - 1, current + 1]);
+  const sorted = Array.from(pages)
+    .filter((page) => page >= 1 && page <= total)
+    .sort((a, b) => a - b);
+
+  const result = [];
+  sorted.forEach((page, index) => {
+    if (index > 0 && page - sorted[index - 1] > 1) result.push("...");
+    result.push(page);
+  });
+
+  return result;
+}
+
+function getTotalPages() {
+  return Math.max(1, Math.ceil(state.filteredCities.length / CONFIG.PAGE_SIZE));
+}
+
+function selectCity(cityKey, moveMap = false) {
+  state.activeCityKey = cityKey;
+
+  document.querySelectorAll(".city-marker").forEach((el) => {
+    el.classList.toggle("is-active", el.dataset.cityKey === cityKey);
+  });
+
+  const marker = state.markers.get(cityKey);
+  if (marker) {
+    marker.openTooltip();
+    if (moveMap) {
+      state.map.flyTo(marker.getLatLng(), Math.max(state.map.getZoom(), 8), { duration: 0.65 });
+    }
+  }
+
+  renderTable();
+}
+
+function fitMapToMarkers() {
+  const markers = Array.from(state.markers.values());
+
+  if (markers.length > 0) {
+    const group = L.featureGroup(markers);
+    state.map.fitBounds(group.getBounds().pad(0.16), { maxZoom: 8 });
+    return;
+  }
+
+  if (state.boundaryLayer) {
+    state.map.fitBounds(state.boundaryLayer.getBounds().pad(0.06));
+    return;
+  }
+
+  state.map.setView([-4.8, -45.1], 7);
+}
+
+function exportData(type) {
+  const payload = state.filteredCities.map((item, index) => ({
+    posicao: index + 1,
+    cidade: item.city,
+    ocorrencias: item.count,
+  }));
+
+  if (type === "json") {
+    downloadFile("trilhas-2026-mapa-alcance.json", JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+    return;
+  }
+
+  const csv = [
+    ["Posição", "Cidade", "Ocorrências"],
+    ...payload.map((item) => [item.posicao, item.cidade, item.ocorrencias]),
+  ].map((row) => row.map(escapeCsvCell).join(",")).join("\n");
+
+  downloadFile("trilhas-2026-mapa-alcance.csv", csv, "text/csv;charset=utf-8");
+}
+
+function escapeCsvCell(value) {
+  const stringValue = String(value ?? "");
+  if (/[",\n\r]/.test(stringValue)) {
+    return `"${stringValue.replace(/"/g, '""')}"`;
+  }
+  return stringValue;
+}
+
+function downloadFile(filename, content, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function setStatus(message) {
+  els.status.hidden = false;
+  els.status.textContent = message;
+}
+
+function formatNumber(value) {
+  return new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 }).format(value);
+}
+
+function escapeHtml(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+function escapeAttribute(value) {
+  return escapeHtml(value).replace(/`/g, "&#096;");
+}
