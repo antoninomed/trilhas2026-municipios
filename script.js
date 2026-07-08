@@ -4,7 +4,7 @@ const CONFIG = {
   GOOGLE_SHEETS_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmt2xY2g29WLrKdh1CUbTUA2dL_D_AD_5O2N42mFQSMM5wrhqs5m6Z7FYNJs0NjrLwD2I1imA_ke2K/pub?gid=0&single=true&output=csv",
   GOOGLE_SHEET_GID: "0",
 
-  CITY_COLUMN_NAME: "Cidade",
+  CITY_COLUMN_NAME: "Município",
 
   COUNT_COLUMN_NAME: "",
 
@@ -13,20 +13,6 @@ const CONFIG = {
   PAGE_SIZE: 10,
 };
 
-const SAMPLE_ROWS = [
-  { Cidade: "São Luís" },
-  ...Array.from({ length: 99 }, () => ({ Cidade: "Sao Luis" })),
-  ...Array.from({ length: 35 }, () => ({ Cidade: "Pinheiro" })),
-  ...Array.from({ length: 30 }, () => ({ Cidade: "Imperatriz" })),
-  ...Array.from({ length: 25 }, () => ({ Cidade: "Codó" })),
-  ...Array.from({ length: 20 }, () => ({ Cidade: "Caxias" })),
-  ...Array.from({ length: 18 }, () => ({ Cidade: "Santa Ines" })),
-  ...Array.from({ length: 12 }, () => ({ Cidade: "Chapadinha" })),
-  ...Array.from({ length: 11 }, () => ({ Cidade: "Barra do Corda" })),
-  ...Array.from({ length: 9 }, () => ({ Cidade: "Balsas" })),
-  ...Array.from({ length: 8 }, () => ({ Cidade: "Tutoia" })),
-  ...Array.from({ length: 7 }, () => ({ Cidade: "Zé Doca" })),
-];
 
 const FALLBACK_CITY_COORDS = {
   "sao luis": { name: "São Luís", lat: -2.5307, lng: -44.3068 },
@@ -57,8 +43,11 @@ const state = {
   markersLayer: null,
   boundaryLayer: null,
   cityIndex: new Map(),
+  registeredCities: [],
+  missingCities: [],
   allCities: [],
   filteredCities: [],
+  viewMode: "registered",
   markers: new Map(),
   activeCityKey: null,
   sortDirection: "desc",
@@ -78,6 +67,10 @@ const els = {
   pageNumbers: document.getElementById("page-numbers"),
   exportToggle: document.getElementById("export-toggle"),
   exportOptions: document.getElementById("export-options"),
+  showRegistered: document.getElementById("show-registered"),
+  showMissing: document.getElementById("show-missing"),
+  registeredCount: document.getElementById("registered-count"),
+  missingCount: document.getElementById("missing-count"),
 };
 
 window.addEventListener("DOMContentLoaded", init);
@@ -94,17 +87,19 @@ async function init() {
     const rows = await loadRowsFromGoogleSheets();
     const { cities, unmatched } = aggregateRowsByCity(rows);
 
-    state.allCities = cities;
-    state.filteredCities = cities;
+    state.registeredCities = cities;
+    state.missingCities = getMissingMunicipalities(cities);
+    updateViewData();
 
     renderMarkers();
     applyFiltersAndRender();
+    updateModeButtons();
     fitMapToMarkers();
     forceMapResize();
 
     /*if (unmatched.length > 0) {
       const preview = unmatched.slice(0, 5).join(", ");
-      setStatus(`${unmatched.length} cidade(s) não localizada(s) após normalização: ${preview}${unmatched.length > 5 ? "..." : ""}`);
+      setStatus(`${unmatched.length} munícipio(s) não localizada(s) após normalização: ${preview}${unmatched.length > 5 ? "..." : ""}`);
       console.warn("Cidades não localizadas:", unmatched);
     }*/
   } catch (error) {
@@ -112,6 +107,66 @@ async function init() {
     setStatus("Não foi possível carregar os dados. Confira o link da planilha e a publicação como CSV.");
     els.tableBody.innerHTML = `<tr><td colspan="3" class="empty-state">Erro ao carregar os dados.</td></tr>`;
   }
+}
+
+
+function setViewMode(mode) {
+  if (!["registered", "missing"].includes(mode)) return;
+  if (state.viewMode === mode) return;
+
+  state.viewMode = mode;
+  state.page = 1;
+  state.activeCityKey = null;
+
+  updateViewData();
+  renderMarkers();
+  applyFiltersAndRender();
+  updateModeButtons();
+  fitMapToMarkers();
+  forceMapResize();
+}
+
+function updateViewData() {
+  state.allCities = state.viewMode === "missing"
+    ? state.missingCities
+    : state.registeredCities;
+
+  state.filteredCities = state.allCities;
+}
+
+function updateModeButtons() {
+  const isMissingMode = state.viewMode === "missing";
+
+  els.showRegistered.classList.toggle("active", !isMissingMode);
+  els.showMissing.classList.toggle("active", isMissingMode);
+
+  els.showRegistered.setAttribute("aria-pressed", String(!isMissingMode));
+  els.showMissing.setAttribute("aria-pressed", String(isMissingMode));
+
+  els.registeredCount.textContent = formatNumber(state.registeredCities.length);
+  els.missingCount.textContent = formatNumber(state.missingCities.length);
+
+  if (isMissingMode) {
+    setStatus(`${formatNumber(state.missingCities.length)} município(s) do Maranhão ainda estão sem inscrições.`);
+  } else {
+    setStatus(`${formatNumber(state.registeredCities.length)} município(s) do Maranhão já possuem inscrições.`);
+  }
+}
+
+function getMissingMunicipalities(registeredCities) {
+  const registeredKeys = new Set(registeredCities.map((city) => city.key));
+
+  return Array.from(state.cityIndex.entries())
+    .filter(([key]) => !registeredKeys.has(key))
+    .map(([key, info]) => ({
+      key,
+      city: info.name,
+      lat: info.lat,
+      lng: info.lng,
+      count: 0,
+      isMissing: true,
+    }))
+    .sort((a, b) => a.city.localeCompare(b.city, "pt-BR"));
 }
 
 function setupMap() {
@@ -126,7 +181,36 @@ function setupMap() {
     attribution: "&copy; OpenStreetMap contributors",
   }).addTo(state.map);
 
-  state.markersLayer = L.layerGroup().addTo(state.map);
+  state.markersLayer = L.markerClusterGroup({
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: true,
+    zoomToBoundsOnClick: true,
+    removeOutsideVisibleBounds: true,
+    disableClusteringAtZoom: 8,
+    maxClusterRadius: 55,
+    iconCreateFunction(cluster) {
+      const children = cluster.getAllChildMarkers();
+      const totalOccurrences = children.reduce((sum, marker) => sum + (marker.options.cityData?.count || 0), 0);
+      const citiesCount = children.length;
+      const isMissingCluster = children.every((marker) => marker.options.cityData?.isMissing);
+      const bucket = isMissingCluster ? "empty" : getBucket(totalOccurrences);
+      const mainValue = isMissingCluster ? citiesCount : totalOccurrences;
+      const metaLabel = isMissingCluster
+        ? "sem inscrição"
+        : `${citiesCount} município${citiesCount > 1 ? "s" : ""}`;
+
+      return L.divIcon({
+        html: `
+          <div class="cluster-marker ${bucket}">
+            <span class="cluster-total">${formatNumber(mainValue)}</span>
+            <span class="cluster-meta">${metaLabel}</span>
+          </div>
+        `,
+        className: "cluster-div-icon",
+        iconSize: [64, 64],
+      });
+    },
+  }).addTo(state.map);
 
   const HomeControl = L.Control.extend({
     options: { position: "topleft" },
@@ -151,11 +235,26 @@ function setupMap() {
 
   state.map.addControl(new HomeControl());
 
-  // Corrige o problema de tiles quebrados quando o Leaflet é renderizado
-  // antes do navegador terminar de calcular o tamanho real do container.
-  forceMapResize();
-  window.addEventListener("load", forceMapResize);
-  window.addEventListener("resize", debounce(forceMapResize, 120));
+  state.map.on("zoomend", updateMapVisualDensity);
+
+  requestAnimationFrame(() => {
+    state.map.invalidateSize();
+    updateMapVisualDensity();
+  });
+
+  window.addEventListener("load", () => {
+    setTimeout(() => {
+      state.map.invalidateSize();
+      updateMapVisualDensity();
+    }, 200);
+  });
+
+  window.addEventListener("resize", () => {
+    setTimeout(() => {
+      state.map.invalidateSize();
+      updateMapVisualDensity();
+    }, 150);
+  });
 }
 
 
@@ -179,7 +278,21 @@ function debounce(callback, delay = 120) {
   };
 }
 
+function updateMapVisualDensity() {
+  const mapElement = document.getElementById("map");
+  if (!mapElement || !state.map) return;
+  mapElement.classList.toggle("show-city-labels", state.map.getZoom() >= 8);
+}
+
 function setupEvents() {
+  els.showRegistered.addEventListener("click", () => {
+    setViewMode("registered");
+  });
+
+  els.showMissing.addEventListener("click", () => {
+    setViewMode("missing");
+  });
+
   els.search.addEventListener("input", () => {
     state.search = els.search.value;
     state.page = 1;
@@ -477,6 +590,7 @@ function normalizeLoose(value) {
 }
 
 function getBucket(count) {
+  if (count <= 0) return "empty";
   if (count >= 80) return "danger";
   if (count >= 30) return "warning";
   if (count >= 10) return "notice";
@@ -484,6 +598,7 @@ function getBucket(count) {
 }
 
 function getBubbleSize(count) {
+  if (count <= 0) return 34;
   const size = 30 + Math.log10(count + 1) * 18;
   return Math.max(34, Math.min(62, Math.round(size)));
 }
@@ -510,17 +625,23 @@ function renderMarkers() {
       iconAnchor: [0, 0],
     });
 
-    const marker = L.marker([item.lat, item.lng], { icon })
-      .bindTooltip(`<strong>${escapeHtml(item.city)}</strong><br>${formatNumber(item.count)} ocorrência(s)`, {
+    const tooltipText = item.count > 0
+      ? `${formatNumber(item.count)} inscrições`
+      : "Sem inscrições";
+
+    const marker = L.marker([item.lat, item.lng], { icon, cityData: item })
+      .bindTooltip(`<strong>${escapeHtml(item.city)}</strong><br>${tooltipText}`, {
         direction: "top",
         offset: [0, -20],
         opacity: 0.95,
       })
       .on("click", () => selectCity(item.key, true));
 
-    marker.addTo(state.markersLayer);
+    state.markersLayer.addLayer(marker);
     state.markers.set(item.key, marker);
   });
+
+  updateMapVisualDensity();
 }
 
 function applyFiltersAndRender() {
@@ -548,7 +669,10 @@ function renderTable() {
   const pageItems = state.filteredCities.slice(startIndex, startIndex + CONFIG.PAGE_SIZE);
 
   if (pageItems.length === 0) {
-    els.tableBody.innerHTML = `<tr><td colspan="3" class="empty-state">Nenhuma cidade encontrada.</td></tr>`;
+    const emptyMessage = state.viewMode === "missing"
+      ? "Nenhum município sem inscrição encontrado."
+      : "Nenhum município encontrado.";
+    els.tableBody.innerHTML = `<tr><td colspan="3" class="empty-state">${emptyMessage}</td></tr>`;
   } else {
     els.tableBody.innerHTML = pageItems.map((item, index) => {
       const bucket = getBucket(item.count);
@@ -576,8 +700,8 @@ function renderTable() {
 
   const endIndex = Math.min(startIndex + pageItems.length, total);
   els.paginationInfo.textContent = total > 0
-    ? `Mostrando ${startIndex + 1} a ${endIndex} de ${total} cidades`
-    : "Mostrando 0 cidades";
+    ? `Mostrando ${startIndex + 1} a ${endIndex} de ${total} municípios`
+    : "Mostrando 0 municípios";
 
   renderPagination(totalPages);
 }
@@ -630,9 +754,17 @@ function selectCity(cityKey, moveMap = false) {
 
   const marker = state.markers.get(cityKey);
   if (marker) {
-    marker.openTooltip();
-    if (moveMap) {
-      state.map.flyTo(marker.getLatLng(), Math.max(state.map.getZoom(), 8), { duration: 0.65 });
+    const revealMarker = () => {
+      marker.openTooltip();
+      if (moveMap) {
+        state.map.flyTo(marker.getLatLng(), Math.max(state.map.getZoom(), 8), { duration: 0.65 });
+      }
+    };
+
+    if (moveMap && typeof state.markersLayer.zoomToShowLayer === "function") {
+      state.markersLayer.zoomToShowLayer(marker, revealMarker);
+    } else {
+      revealMarker();
     }
   }
 
@@ -640,12 +772,12 @@ function selectCity(cityKey, moveMap = false) {
 }
 
 function fitMapToMarkers() {
-  const markers = Array.from(state.markers.values());
-
-  if (markers.length > 0) {
-    const group = L.featureGroup(markers);
-    state.map.fitBounds(group.getBounds().pad(0.16), { maxZoom: 8 });
-    return;
+  if (state.markersLayer) {
+    const bounds = state.markersLayer.getBounds();
+    if (bounds && bounds.isValid()) {
+      state.map.fitBounds(bounds.pad(0.16), { maxZoom: 8 });
+      return;
+    }
   }
 
   if (state.boundaryLayer) {
@@ -657,23 +789,29 @@ function fitMapToMarkers() {
 }
 
 function exportData(type) {
+  const isMissingMode = state.viewMode === "missing";
   const payload = state.filteredCities.map((item, index) => ({
     posicao: index + 1,
-    cidade: item.city,
-    ocorrencias: item.count,
+    municipio: item.city,
+    inscricoes: item.count,
+    situacao: isMissingMode ? "Sem inscrições" : "Com inscrições",
   }));
 
+  const baseFilename = isMissingMode
+    ? "trilhas-2026-municipios-sem-inscricao"
+    : "trilhas-2026-mapa-alcance";
+
   if (type === "json") {
-    downloadFile("trilhas-2026-mapa-alcance.json", JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
+    downloadFile(`${baseFilename}.json`, JSON.stringify(payload, null, 2), "application/json;charset=utf-8");
     return;
   }
 
   const csv = [
-    ["Posição", "Cidade", "Ocorrências"],
-    ...payload.map((item) => [item.posicao, item.cidade, item.ocorrencias]),
+    ["Posição", "Município", "Inscrições", "Situação"],
+    ...payload.map((item) => [item.posicao, item.municipio, item.inscricoes, item.situacao]),
   ].map((row) => row.map(escapeCsvCell).join(",")).join("\n");
 
-  downloadFile("trilhas-2026-mapa-alcance.csv", csv, "text/csv;charset=utf-8");
+  downloadFile(`${baseFilename}.csv`, csv, "text/csv;charset=utf-8");
 }
 
 function escapeCsvCell(value) {

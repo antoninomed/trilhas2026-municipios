@@ -30,7 +30,7 @@
       </header>
 
       <div class="dashboard-grid">
-        <section class="map-card" aria-label="Mapa de inscrições por cidade no Maranhão">
+        <section class="map-card" aria-label="Mapa de inscrições por município no Maranhão">
           <div id="map" class="map"></div>
 
           <div class="map-legend" aria-label="Legenda de Inscrições">
@@ -42,14 +42,25 @@
           </div>
         </section>
 
-        <aside class="table-card" aria-label="Tabela de Inscrições por cidade">
+        <aside class="table-card" aria-label="Tabela de inscrições por município">
           <div class="table-toolbar">
             <label class="search-box" for="city-search">
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d="m20.7 19.3-4.2-4.2a7.55 7.55 0 1 0-1.4 1.4l4.2 4.2a1 1 0 0 0 1.4-1.4ZM5.5 10.5a5 5 0 1 1 10 0 5 5 0 0 1-10 0Z"/>
               </svg>
-              <input id="city-search" type="search" placeholder="Buscar cidade..." autocomplete="off" />
+              <input id="city-search" type="search" placeholder="Buscar município..." autocomplete="off" />
             </label>
+
+            <div class="view-mode-toggle" aria-label="Alternar visualização do dashboard">
+              <button id="show-registered" type="button" class="mode-button active">
+                Com inscrições
+                <strong id="registered-count">0</strong>
+              </button>
+              <button id="show-missing" type="button" class="mode-button">
+                Sem inscrições
+                <strong id="missing-count">0</strong>
+              </button>
+            </div>
 
             <div class="export-menu">
               <button id="export-toggle" type="button" class="export-button" aria-haspopup="menu" aria-expanded="false">
@@ -72,9 +83,9 @@
               <thead>
                 <tr>
                   <th class="rank-column" aria-label="Posição"></th>
-                  <th>Cidade</th>
+                  <th>Município</th>
                   <th class="number-column">
-                    <button id="sort-button" type="button" class="sort-button" aria-label="Ordenar Inscrições">
+                    <button id="sort-button" type="button" class="sort-button" aria-label="Ordenar inscrições">
                       Inscrições
                       <span id="sort-icon">⌄</span>
                     </button>
@@ -90,7 +101,7 @@
           </div>
 
           <footer class="table-footer">
-            <p id="pagination-info">Mostrando 0 cidades</p>
+            <p id="pagination-info">Mostrando 0 municípios</p>
             <nav class="pagination" aria-label="Paginação da tabela">
               <button id="prev-page" type="button" class="page-button" aria-label="Página anterior">‹</button>
               <div id="page-numbers" class="page-numbers"></div>
@@ -107,6 +118,7 @@
     integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
     crossorigin=""
   ></script>
+  <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
