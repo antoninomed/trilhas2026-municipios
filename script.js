@@ -155,9 +155,9 @@ function updateModeButtons() {
   }
 
   if (isMissingMode) {
-    setStatus(`${formatNumber(state.missingCities.length)} município(s) do Maranhão ainda estão sem inscrições.`);
+    setStatus(`${formatNumber(state.missingCities.length)} municípios ainda não possuem inscrições no Trilhas 2026.`);
   } else {
-    setStatus(`${formatNumber(state.registeredCities.length)} município(s) do Maranhão já possuem inscrições.`);
+    setStatus(`${formatNumber(state.registeredCities.length)} municípios já registraram inscrições no Trilhas 2026.`);
   }
 }
 
