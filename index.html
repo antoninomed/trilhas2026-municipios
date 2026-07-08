@@ -62,20 +62,7 @@
               </button>
             </div>
 
-            <div class="export-menu">
-              <button id="export-toggle" type="button" class="export-button" aria-haspopup="menu" aria-expanded="false">
-                <svg viewBox="0 0 24 24" aria-hidden="true">
-                  <path d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 0 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Z"/>
-                  <path d="M5 19a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/>
-                </svg>
-                Exportar
-                <span class="chevron">⌄</span>
-              </button>
-              <div id="export-options" class="export-options" role="menu" hidden>
-                <button type="button" data-export="csv" role="menuitem">Exportar CSV</button>
-                <button type="button" data-export="json" role="menuitem">Exportar JSON</button>
-              </div>
-            </div>
+
           </div>
 
           <div class="table-wrap">
@@ -102,11 +89,29 @@
 
           <footer class="table-footer">
             <p id="pagination-info">Mostrando 0 municípios</p>
-            <nav class="pagination" aria-label="Paginação da tabela">
-              <button id="prev-page" type="button" class="page-button" aria-label="Página anterior">‹</button>
-              <div id="page-numbers" class="page-numbers"></div>
-              <button id="next-page" type="button" class="page-button" aria-label="Próxima página">›</button>
-            </nav>
+
+            <div class="table-footer-actions">
+              <div class="export-menu">
+              <button id="export-toggle" type="button" class="export-button" aria-haspopup="menu" aria-expanded="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3a1 1 0 0 1 1 1v9.59l3.3-3.3a1 1 0 0 1 1.4 1.42l-5 5a1 1 0 0 1-1.4 0l-5-5a1 1 0 1 1 1.4-1.42l3.3 3.3V4a1 1 0 0 1 1-1Z"/>
+              <path d="M5 19a1 1 0 0 1 1-1h12a1 1 0 1 1 0 2H6a1 1 0 0 1-1-1Z"/>
+              </svg>
+              Exportar
+              <span class="chevron"></span>
+              </button>
+              <div id="export-options" class="export-options" role="menu" hidden>
+              <button type="button" data-export="csv" role="menuitem">Exportar CSV</button>
+              <button type="button" data-export="json" role="menuitem">Exportar JSON</button>
+              </div>
+              </div>
+
+              <nav class="pagination" aria-label="Paginação da tabela">
+                <button id="prev-page" type="button" class="page-button" aria-label="Página anterior">‹</button>
+                <div id="page-numbers" class="page-numbers"></div>
+                <button id="next-page" type="button" class="page-button" aria-label="Próxima página">›</button>
+              </nav>
+            </div>
           </footer>
         </aside>
       </div>
