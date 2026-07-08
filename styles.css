@@ -212,6 +212,45 @@ button {
   margin-bottom: 28px;
 }
 
+.header-copy {
+  min-width: 0;
+}
+
+.header-metrics {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.metric-card {
+  min-width: 190px;
+  padding: 13px 16px;
+  border: 1px solid #dbe3ef;
+  border-radius: 10px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.07);
+}
+
+.metric-label {
+  display: block;
+  margin-bottom: 4px;
+  color: #64748b;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.metric-card strong {
+  display: block;
+  color: #1d4ed8;
+  font-size: 1.65rem;
+  line-height: 1;
+  font-weight: 900;
+  letter-spacing: -0.03em;
+}
+
 .title-icon {
   flex: 0 0 auto;
   width: 42px;
@@ -852,6 +891,18 @@ tbody tr.active-row {
   .dashboard-header {
     gap: 12px;
     margin-bottom: 18px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .header-metrics {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .metric-card {
+    width: 100%;
+    min-width: 0;
   }
 
   .title-icon {

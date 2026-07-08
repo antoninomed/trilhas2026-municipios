@@ -48,6 +48,7 @@ const state = {
   allCities: [],
   filteredCities: [],
   viewMode: "registered",
+  totalRegistrations: 0,
   markers: new Map(),
   activeCityKey: null,
   sortDirection: "desc",
@@ -71,6 +72,7 @@ const els = {
   showMissing: document.getElementById("show-missing"),
   registeredCount: document.getElementById("registered-count"),
   missingCount: document.getElementById("missing-count"),
+  totalRegistrations: document.getElementById("total-registrations"),
 };
 
 window.addEventListener("DOMContentLoaded", init);
@@ -85,6 +87,8 @@ async function init() {
     drawBoundary(geojson);
 
     const rows = await loadRowsFromGoogleSheets();
+    state.totalRegistrations = rows.length;
+
     const { cities, unmatched } = aggregateRowsByCity(rows);
 
     state.registeredCities = cities;
@@ -145,6 +149,10 @@ function updateModeButtons() {
 
   els.registeredCount.textContent = formatNumber(state.registeredCities.length);
   els.missingCount.textContent = formatNumber(state.missingCities.length);
+
+  if (els.totalRegistrations) {
+    els.totalRegistrations.textContent = formatNumber(state.totalRegistrations);
+  }
 
   if (isMissingMode) {
     setStatus(`${formatNumber(state.missingCities.length)} município(s) do Maranhão ainda estão sem inscrições.`);
