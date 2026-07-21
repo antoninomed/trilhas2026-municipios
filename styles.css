@@ -837,7 +837,7 @@ table {
 th,
 td {
   border-bottom: 1px solid var(--line-soft);
-  padding: 16px 20px;
+  padding: 12px 20px;
   vertical-align: middle;
 }
 
@@ -1104,6 +1104,7 @@ tbody tr.active-row {
   font-size: 1.75rem;
   line-height: 0.8;
   transform: translateY(-1px);
+  margin-bottom: 7px;
 }
 
 .trend-nav-button:hover:not(:disabled) {
