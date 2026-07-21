@@ -11,9 +11,9 @@
     integrity="sha256-p4NxAoJBhIINfQv8D3ssdmxn0fR1iMrHqBz0F3lZwds="
     crossorigin=""
   />
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css?v=20260721-card-lateral-v2" />
 </head>
-<body>
+<body data-dashboard-version="20260721-card-lateral-v2">
   <main class="page-shell">
     <section class="dashboard-card" aria-labelledby="dashboard-title">
       <header class="dashboard-header">
@@ -33,6 +33,7 @@
             <span class="metric-label">Inscrições Recebidas</span>
             <strong id="total-registrations">0</strong>
           </article>
+
         </div>
       </header>
 
@@ -121,6 +122,90 @@
             </div>
           </footer>
         </aside>
+
+        <section class="trend-card" aria-labelledby="trend-title">
+          <header class="trend-header">
+            <div>
+              <span class="trend-eyebrow">Evolução diária</span>
+              <h2 id="trend-title">Inscrições por dia</h2>
+            </div>
+            <div class="trend-summary" aria-live="polite">
+              <strong id="trend-total">0</strong>
+              <span>no período</span>
+            </div>
+          </header>
+
+          <p id="trend-range" class="trend-range">Carregando período...</p>
+
+          <div class="trend-chart-row">
+            <button
+              id="trend-prev"
+              type="button"
+              class="trend-nav-button"
+              aria-label="Mostrar o dia anterior"
+              title="Mostrar o dia anterior"
+            >
+              <span aria-hidden="true">‹</span>
+            </button>
+
+            <div
+              id="trend-chart"
+              class="trend-chart"
+              role="img"
+              aria-label="Gráfico de inscrições por dia"
+              aria-live="polite"
+            >
+              <div class="trend-empty">Carregando inscrições por dia...</div>
+            </div>
+
+            <button
+              id="trend-next"
+              type="button"
+              class="trend-nav-button"
+              aria-label="Mostrar o próximo dia"
+              title="Mostrar o próximo dia"
+            >
+              <span aria-hidden="true">›</span>
+            </button>
+          </div>
+        </section>
+
+        <article class="metric-card projection-card" aria-labelledby="projection-title">
+          <div class="projection-heading">
+            <span id="projection-title" class="metric-label">Projeção até 27/07</span>
+            <span id="projection-status" class="projection-status">Calculando...</span>
+          </div>
+
+          <div class="projection-values">
+            <div>
+              <span class="projection-value-label">Inscrições</span>
+              <strong id="projected-registrations">—</strong>
+              <small id="projection-registration-gap">Meta: 4.000</small>
+            </div>
+            <div>
+              <span class="projection-value-label">Municípios</span>
+              <strong id="projected-municipalities">—</strong>
+              <small>projetados de 217</small>
+            </div>
+          </div>
+
+          <div class="municipality-progress-copy">
+            <span>Cobertura atual</span>
+            <strong id="municipality-progress-count">0 de 217 · 0%</strong>
+          </div>
+          <div
+            id="municipality-progress"
+            class="municipality-progress"
+            role="progressbar"
+            aria-label="Percentual de municípios alcançados"
+            aria-valuemin="0"
+            aria-valuemax="217"
+            aria-valuenow="0"
+          >
+            <span id="municipality-progress-fill"></span>
+          </div>
+          <p id="projection-basis" class="projection-basis">Ritmo dos últimos 7 dias</p>
+        </article>
       </div>
     </section>
   </main>
@@ -131,6 +216,6 @@
     crossorigin=""
   ></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="script.js"></script>
+  <script src="script.js?v=20260721-card-lateral-v2"></script>
 </body>
 </html>

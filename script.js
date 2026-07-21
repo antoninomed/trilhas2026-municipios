@@ -6,11 +6,18 @@ const CONFIG = {
 
   CITY_COLUMN_NAME: "Município",
 
+  DATE_COLUMN_NAME: "Data",
+
   COUNT_COLUMN_NAME: "",
 
   MUNICIPALITIES_GEOJSON_URL: "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-21-mun.json",
 
   PAGE_SIZE: 10,
+  CHART_WINDOW_DAYS: 7,
+  PROJECTION_WINDOW_DAYS: 7,
+  REGISTRATION_GOAL: 4000,
+  MUNICIPALITY_GOAL: 217,
+  REGISTRATION_DEADLINE: "2026-07-27",
 };
 
 
@@ -54,6 +61,8 @@ const state = {
   sortDirection: "desc",
   page: 1,
   search: "",
+  dailyRegistrations: [],
+  chartStartIndex: 0,
 };
 
 const els = {
@@ -73,6 +82,19 @@ const els = {
   registeredCount: document.getElementById("registered-count"),
   missingCount: document.getElementById("missing-count"),
   totalRegistrations: document.getElementById("total-registrations"),
+  trendChart: document.getElementById("trend-chart"),
+  trendRange: document.getElementById("trend-range"),
+  trendTotal: document.getElementById("trend-total"),
+  trendPrev: document.getElementById("trend-prev"),
+  trendNext: document.getElementById("trend-next"),
+  projectionStatus: document.getElementById("projection-status"),
+  projectedRegistrations: document.getElementById("projected-registrations"),
+  projectionRegistrationGap: document.getElementById("projection-registration-gap"),
+  projectedMunicipalities: document.getElementById("projected-municipalities"),
+  municipalityProgress: document.getElementById("municipality-progress"),
+  municipalityProgressFill: document.getElementById("municipality-progress-fill"),
+  municipalityProgressCount: document.getElementById("municipality-progress-count"),
+  projectionBasis: document.getElementById("projection-basis"),
 };
 
 window.addEventListener("DOMContentLoaded", init);
@@ -88,6 +110,8 @@ async function init() {
 
     const rows = await loadRowsFromGoogleSheets();
     state.totalRegistrations = rows.length;
+    state.dailyRegistrations = aggregateRowsByDate(rows);
+    state.chartStartIndex = Math.max(0, state.dailyRegistrations.length - CONFIG.CHART_WINDOW_DAYS);
 
     const { cities, unmatched } = aggregateRowsByCity(rows);
 
@@ -98,6 +122,8 @@ async function init() {
     renderMarkers();
     applyFiltersAndRender();
     updateModeButtons();
+    renderGoalProjection(rows);
+    renderRegistrationChart();
     fitMapToMarkers();
     forceMapResize();
 
@@ -110,6 +136,7 @@ async function init() {
     console.error(error);
     setStatus("Não foi possível carregar os dados. Confira o link da planilha e a publicação como CSV.");
     els.tableBody.innerHTML = `<tr><td colspan="3" class="empty-state">Erro ao carregar os dados.</td></tr>`;
+    renderRegistrationChart();
   }
 }
 
@@ -349,6 +376,23 @@ function setupEvents() {
     els.exportToggle.setAttribute("aria-expanded", "false");
     els.exportOptions.hidden = true;
   });
+
+  els.trendPrev.addEventListener("click", () => {
+    if (state.chartStartIndex <= 0) return;
+    state.chartStartIndex -= 1;
+    renderRegistrationChart();
+  });
+
+  els.trendNext.addEventListener("click", () => {
+    const lastStart = Math.max(0, state.dailyRegistrations.length - CONFIG.CHART_WINDOW_DAYS);
+    if (state.chartStartIndex >= lastStart) return;
+    state.chartStartIndex += 1;
+    renderRegistrationChart();
+  });
+
+  window.addEventListener("resize", debounce(() => {
+    if (state.dailyRegistrations.length > 0) renderRegistrationChart();
+  }, 140));
 }
 
 async function loadMunicipalitiesGeoJson() {
@@ -549,6 +593,294 @@ function aggregateRowsByCity(rows) {
     .sort((a, b) => b.count - a.count || a.city.localeCompare(b.city, "pt-BR"));
 
   return { cities, unmatched: Array.from(unmatched) };
+}
+
+function aggregateRowsByDate(rows) {
+  const dateHeader = findHeader(rows, CONFIG.DATE_COLUMN_NAME);
+  if (!dateHeader) return [];
+
+  const totals = new Map();
+  let firstDate = null;
+  let lastDate = null;
+
+  rows.forEach((row) => {
+    const date = parseRegistrationDate(row[dateHeader]);
+    if (!date) return;
+
+    const key = toDateKey(date);
+    totals.set(key, (totals.get(key) || 0) + 1);
+
+    if (!firstDate || date < firstDate) firstDate = date;
+    if (!lastDate || date > lastDate) lastDate = date;
+  });
+
+  if (!firstDate || !lastDate) return [];
+
+  const minimumStart = addDays(lastDate, -(CONFIG.CHART_WINDOW_DAYS - 1));
+  const rangeStart = firstDate > minimumStart ? minimumStart : firstDate;
+  const series = [];
+
+  for (let cursor = new Date(rangeStart); cursor <= lastDate; cursor = addDays(cursor, 1)) {
+    const date = new Date(cursor);
+    series.push({
+      key: toDateKey(date),
+      date,
+      count: totals.get(toDateKey(date)) || 0,
+    });
+  }
+
+  return series;
+}
+
+function renderGoalProjection(rows) {
+  if (!els.projectedRegistrations) return;
+
+  const dateHeader = findHeader(rows, CONFIG.DATE_COLUMN_NAME);
+  const cityHeader = findHeader(rows, CONFIG.CITY_COLUMN_NAME);
+  const deadline = parseRegistrationDate(CONFIG.REGISTRATION_DEADLINE);
+
+  const datedRows = rows
+    .map((row) => ({
+      date: dateHeader ? parseRegistrationDate(row[dateHeader]) : null,
+      city: cityHeader ? row[cityHeader] : Object.values(row)[0],
+    }))
+    .filter((item) => item.date);
+
+  if (datedRows.length === 0 || !deadline) {
+    els.projectionStatus.textContent = "Sem dados";
+    els.projectionStatus.className = "projection-status unavailable";
+    els.projectedRegistrations.textContent = "—";
+    els.projectedMunicipalities.textContent = "—";
+    els.projectionRegistrationGap.textContent = "Meta: 4.000";
+    els.projectionBasis.textContent = "A coluna Data precisa estar preenchida";
+    updateMunicipalityProgress(state.registeredCities.length);
+    return;
+  }
+
+  const asOfDate = datedRows.reduce(
+    (latest, item) => item.date > latest ? item.date : latest,
+    datedRows[0].date,
+  );
+  const recentStart = addDays(asOfDate, -(CONFIG.PROJECTION_WINDOW_DAYS - 1));
+  const recentRegistrations = datedRows.filter(
+    (item) => item.date >= recentStart && item.date <= asOfDate,
+  ).length;
+  const registrationsPerDay = recentRegistrations / CONFIG.PROJECTION_WINDOW_DAYS;
+  const remainingDays = Math.max(0, differenceInCalendarDays(deadline, asOfDate));
+  const projectedRegistrations = Math.round(
+    state.totalRegistrations + (registrationsPerDay * remainingDays),
+  );
+
+  const firstRegistrationByCity = new Map();
+  datedRows.forEach((item) => {
+    const cityKey = normalizeCityName(item.city);
+    if (!cityKey || !state.cityIndex.has(cityKey)) return;
+
+    const currentFirstDate = firstRegistrationByCity.get(cityKey);
+    if (!currentFirstDate || item.date < currentFirstDate) {
+      firstRegistrationByCity.set(cityKey, item.date);
+    }
+  });
+
+  const newCitiesInWindow = Array.from(firstRegistrationByCity.values())
+    .filter((date) => date >= recentStart && date <= asOfDate)
+    .length;
+  const newCitiesPerDay = newCitiesInWindow / CONFIG.PROJECTION_WINDOW_DAYS;
+  const projectedMunicipalities = Math.min(
+    CONFIG.MUNICIPALITY_GOAL,
+    Math.round(state.registeredCities.length + (newCitiesPerDay * remainingDays)),
+  );
+
+  const registrationGap = projectedRegistrations - CONFIG.REGISTRATION_GOAL;
+  const reachesGoal = registrationGap >= 0;
+
+  els.projectedRegistrations.textContent = formatNumber(projectedRegistrations);
+  els.projectedMunicipalities.textContent = formatNumber(projectedMunicipalities);
+  els.projectionRegistrationGap.textContent = reachesGoal
+    ? `+${formatNumber(registrationGap)} acima da meta`
+    : `Faltariam ${formatNumber(Math.abs(registrationGap))}`;
+  els.projectionStatus.textContent = reachesGoal ? "Meta projetada" : "Abaixo da meta";
+  els.projectionStatus.className = `projection-status ${reachesGoal ? "on-track" : "at-risk"}`;
+  els.projectionBasis.textContent = `${formatNumber(recentRegistrations)} inscrições e ${formatNumber(newCitiesInWindow)} novo(s) município(s) nos últimos 7 dias`;
+
+  updateMunicipalityProgress(state.registeredCities.length);
+}
+
+function updateMunicipalityProgress(currentMunicipalities) {
+  const safeCurrent = Math.min(Math.max(0, currentMunicipalities), CONFIG.MUNICIPALITY_GOAL);
+  const percentage = (safeCurrent / CONFIG.MUNICIPALITY_GOAL) * 100;
+
+  els.municipalityProgressCount.textContent = `${formatNumber(safeCurrent)} de ${formatNumber(CONFIG.MUNICIPALITY_GOAL)} · ${formatPercentage(percentage)}`;
+  els.municipalityProgressFill.style.width = `${Math.min(100, percentage)}%`;
+  els.municipalityProgress.setAttribute("aria-valuenow", String(safeCurrent));
+  els.municipalityProgress.setAttribute("aria-valuetext", `${formatPercentage(percentage)} dos municípios alcançados`);
+}
+
+function differenceInCalendarDays(endDate, startDate) {
+  const millisecondsPerDay = 24 * 60 * 60 * 1000;
+  const endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  return Math.round((endUtc - startUtc) / millisecondsPerDay);
+}
+
+function formatPercentage(value) {
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  }).format(value) + "%";
+}
+
+function parseRegistrationDate(value) {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12);
+  }
+
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+
+  const ptBrMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (ptBrMatch) {
+    return createValidatedDate(Number(ptBrMatch[3]), Number(ptBrMatch[2]), Number(ptBrMatch[1]));
+  }
+
+  const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (isoMatch) {
+    return createValidatedDate(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]));
+  }
+
+  return null;
+}
+
+function createValidatedDate(year, month, day) {
+  const date = new Date(year, month - 1, day, 12);
+  const isValid = date.getFullYear() === year
+    && date.getMonth() === month - 1
+    && date.getDate() === day;
+  return isValid ? date : null;
+}
+
+function addDays(date, amount) {
+  const result = new Date(date);
+  result.setDate(result.getDate() + amount);
+  return result;
+}
+
+function toDateKey(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function renderRegistrationChart() {
+  if (!els.trendChart) return;
+
+  const series = state.dailyRegistrations;
+  const lastStart = Math.max(0, series.length - CONFIG.CHART_WINDOW_DAYS);
+  state.chartStartIndex = Math.min(Math.max(0, state.chartStartIndex), lastStart);
+
+  els.trendPrev.disabled = series.length === 0 || state.chartStartIndex === 0;
+  els.trendNext.disabled = series.length === 0 || state.chartStartIndex >= lastStart;
+
+  if (series.length === 0) {
+    els.trendRange.textContent = "Nenhuma data de inscrição disponível";
+    els.trendTotal.textContent = "0";
+    els.trendChart.setAttribute("aria-label", "Sem dados de inscrições por dia");
+    els.trendChart.innerHTML = `<div class="trend-empty">A coluna “Data” ainda não possui datas válidas.</div>`;
+    return;
+  }
+
+  const visibleData = series.slice(
+    state.chartStartIndex,
+    state.chartStartIndex + CONFIG.CHART_WINDOW_DAYS,
+  );
+  const periodTotal = visibleData.reduce((sum, item) => sum + item.count, 0);
+  const firstVisible = visibleData[0].date;
+  const lastVisible = visibleData[visibleData.length - 1].date;
+
+  els.trendRange.textContent = `${formatFullDate(firstVisible)} — ${formatFullDate(lastVisible)}`;
+  els.trendTotal.textContent = formatNumber(periodTotal);
+  els.trendChart.setAttribute(
+    "aria-label",
+    `Inscrições por dia, de ${formatFullDate(firstVisible)} a ${formatFullDate(lastVisible)}. ${formatNumber(periodTotal)} inscrições no período.`,
+  );
+
+  const width = Math.max(320, Math.round(els.trendChart.clientWidth || 680));
+  const height = 258;
+  const margin = { top: 42, right: 18, bottom: 58, left: 40 };
+  const plotWidth = width - margin.left - margin.right;
+  const plotHeight = height - margin.top - margin.bottom;
+  const baselineY = margin.top + plotHeight;
+  const maximum = Math.max(1, ...visibleData.map((item) => item.count));
+  const stepX = visibleData.length > 1 ? plotWidth / (visibleData.length - 1) : 0;
+
+  const points = visibleData.map((item, index) => {
+    const x = margin.left + (stepX * index);
+    const y = baselineY - ((item.count / maximum) * plotHeight);
+    return { ...item, x, y };
+  });
+
+  const gridLines = [0, 0.5, 1].map((ratio) => {
+    const y = baselineY - (ratio * plotHeight);
+    const value = Math.round(maximum * ratio);
+    return `
+      <line class="trend-grid-line" x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}"></line>
+      <text class="trend-axis-value" x="${margin.left - 10}" y="${y + 4}" text-anchor="end">${value}</text>
+    `;
+  }).join("");
+
+  const guides = points.map((point) => `
+    <line class="trend-day-guide" x1="${point.x}" y1="${margin.top}" x2="${point.x}" y2="${baselineY}"></line>
+  `).join("");
+
+  const linePoints = points.map((point) => `${point.x},${point.y}`).join(" ");
+  const pointElements = points.map((point) => {
+    const weekday = formatWeekday(point.date);
+    const shortDate = formatShortDate(point.date);
+    const countLabelY = Math.max(20, point.y - 14);
+
+    return `
+      <g class="trend-point">
+        <title>${formatNumber(point.count)} inscrições em ${formatFullDate(point.date)}</title>
+        <text class="trend-point-value" x="${point.x}" y="${countLabelY}" text-anchor="middle">${formatNumber(point.count)}</text>
+        <circle class="trend-point-halo" cx="${point.x}" cy="${point.y}" r="8"></circle>
+        <circle class="trend-point-dot" cx="${point.x}" cy="${point.y}" r="4.5"></circle>
+        <text class="trend-day-label" x="${point.x}" y="${baselineY + 24}" text-anchor="middle">${weekday}</text>
+        <text class="trend-date-label" x="${point.x}" y="${baselineY + 43}" text-anchor="middle">${shortDate}</text>
+      </g>
+    `;
+  }).join("");
+
+  els.trendChart.innerHTML = `
+    <svg class="trend-svg" viewBox="0 0 ${width} ${height}" role="presentation" aria-hidden="true">
+      ${gridLines}
+      ${guides}
+      <polyline class="trend-line" points="${linePoints}"></polyline>
+      ${pointElements}
+    </svg>
+  `;
+}
+
+function formatWeekday(date) {
+  const label = new Intl.DateTimeFormat("pt-BR", { weekday: "short" })
+    .format(date)
+    .replace(".", "");
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
+function formatShortDate(date) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+  }).format(date);
+}
+
+function formatFullDate(date) {
+  return new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  }).format(date).replace(/\./g, "");
 }
 
 function findHeader(rows, expectedHeader) {
