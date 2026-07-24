@@ -166,6 +166,12 @@
   --notice: #e4c824;
   --success: #74b94a;
   --empty: #64748b;
+  --gender-1: #3d7edb;
+  --gender-2: #ee8b22;
+  --gender-3: #d94b4b;
+  --gender-4: #74b94a;
+  --gender-5: #9061c9;
+  --gender-6: #e4c824;
 }
 
 * {
@@ -424,6 +430,11 @@ button {
 .dashboard-grid > .projection-card {
   grid-column: 2;
   grid-row: 2;
+}
+
+.dashboard-grid > .gender-track-card {
+  grid-column: 1 / -1;
+  grid-row: 3;
 }
 
 .map-card,
@@ -1013,6 +1024,116 @@ tbody tr.active-row {
   overflow: hidden;
 }
 
+.gender-track-card {
+  min-width: 0;
+  padding: 22px 22px 20px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  background: #fff;
+  overflow: hidden;
+}
+
+.gender-track-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0 20px;
+}
+
+.gender-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--muted);
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+}
+
+.gender-chip:hover {
+  border-color: var(--chip-color, var(--blue));
+}
+
+.gender-chip-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--chip-color, var(--blue));
+  opacity: 0.45;
+  transition: opacity 0.15s ease;
+}
+
+.gender-chip.active {
+  border-color: var(--chip-color, var(--blue));
+  color: var(--text);
+  background: color-mix(in srgb, var(--chip-color, var(--blue)) 12%, #fff);
+}
+
+.gender-chip.active .gender-chip-dot {
+  opacity: 1;
+}
+
+.gender-chip strong {
+  color: inherit;
+  font-weight: 800;
+}
+
+.track-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.track-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 260px) 1fr;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 0;
+}
+
+.track-row-label {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.track-row-label span {
+  color: var(--text);
+  font-weight: 600;
+  font-size: 0.88rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.track-row-label strong {
+  color: var(--muted);
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+
+.track-bar-track {
+  display: flex;
+  height: 18px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--line-soft);
+}
+
+.track-bar-segment {
+  height: 100%;
+  min-width: 3px;
+}
+
 .trend-header {
   display: flex;
   align-items: flex-start;
@@ -1205,7 +1326,8 @@ tbody tr.active-row {
   .dashboard-grid > .map-card,
   .dashboard-grid > .table-card,
   .dashboard-grid > .trend-card,
-  .dashboard-grid > .projection-card {
+  .dashboard-grid > .projection-card,
+  .dashboard-grid > .gender-track-card {
     grid-column: auto;
     grid-row: auto;
   }
@@ -1338,6 +1460,20 @@ tbody tr.active-row {
   .trend-chart-row {
     grid-template-columns: 34px minmax(0, 1fr) 34px;
     gap: 4px;
+  }
+
+  .gender-track-card {
+    padding: 18px 14px 16px;
+  }
+
+  .track-row {
+    grid-template-columns: 1fr;
+    gap: 6px;
+    padding: 10px 0;
+  }
+
+  .track-row-label span {
+    white-space: normal;
   }
 
   .trend-nav-button {

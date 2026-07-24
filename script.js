@@ -1,4 +1,3 @@
-
 const CONFIG = {
 
   GOOGLE_SHEETS_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmt2xY2g29WLrKdh1CUbTUA2dL_D_AD_5O2N42mFQSMM5wrhqs5m6Z7FYNJs0NjrLwD2I1imA_ke2K/pub?gid=0&single=true&output=csv",
@@ -9,6 +8,10 @@ const CONFIG = {
   DATE_COLUMN_NAME: "Data",
 
   COUNT_COLUMN_NAME: "",
+
+  GENDER_COLUMN_NAME: "Gênero",
+
+  TRACK_COLUMN_NAME: "Trilha",
 
   MUNICIPALITIES_GEOJSON_URL: "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-21-mun.json",
 
@@ -63,6 +66,8 @@ const state = {
   search: "",
   dailyRegistrations: [],
   chartStartIndex: 0,
+  genderTrackData: null,
+  activeTracks: new Set(),
 };
 
 const els = {
@@ -95,6 +100,9 @@ const els = {
   municipalityProgressFill: document.getElementById("municipality-progress-fill"),
   municipalityProgressCount: document.getElementById("municipality-progress-count"),
   projectionBasis: document.getElementById("projection-basis"),
+  genderTrackChart: document.getElementById("gender-track-chart"),
+  genderTrackFilters: document.getElementById("gender-track-filters"),
+  genderTrackTotal: document.getElementById("gender-track-total"),
 };
 
 window.addEventListener("DOMContentLoaded", init);
@@ -124,6 +132,7 @@ async function init() {
     updateModeButtons();
     renderGoalProjection(rows);
     renderRegistrationChart();
+    renderGenderTrackSection(aggregateByTrackAndGender(rows));
     fitMapToMarkers();
     forceMapResize();
 
@@ -137,6 +146,9 @@ async function init() {
     setStatus("Não foi possível carregar os dados. Confira o link da planilha e a publicação como CSV.");
     els.tableBody.innerHTML = `<tr><td colspan="3" class="empty-state">Erro ao carregar os dados.</td></tr>`;
     renderRegistrationChart();
+    if (els.genderTrackChart) {
+      els.genderTrackChart.innerHTML = `<div class="trend-empty">Erro ao carregar os dados.</div>`;
+    }
   }
 }
 
@@ -882,6 +894,389 @@ function formatFullDate(date) {
     year: "numeric",
   }).format(date).replace(/\./g, "");
 }
+
+
+function aggregateByTrackAndGender(rows) {
+  const UNINFORMED = "Não informado";
+
+  const genderHeader = findHeader(rows, CONFIG.GENDER_COLUMN_NAME);
+  const trackHeader = findHeader(rows, CONFIG.TRACK_COLUMN_NAME);
+
+  const genderTotals = new Map();
+  const trackTotals = new Map();
+  const genderMap = new Map();
+
+  let total = 0;
+
+  rows.forEach((row) => {
+    const rawTrack = trackHeader ? row[trackHeader] : "";
+    const rawGender = genderHeader ? row[genderHeader] : "";
+
+    const track = normalizeLabel(rawTrack) || UNINFORMED;
+    const gender = normalizeLabel(rawGender) || UNINFORMED;
+
+    total += 1;
+
+    genderTotals.set(
+      gender,
+      (genderTotals.get(gender) || 0) + 1
+    );
+
+    trackTotals.set(
+      track,
+      (trackTotals.get(track) || 0) + 1
+    );
+
+    if (!genderMap.has(gender)) {
+      genderMap.set(gender, {
+        gender,
+        total: 0,
+        byTrack: new Map(),
+      });
+    }
+
+    const genderEntry = genderMap.get(gender);
+
+    genderEntry.total += 1;
+
+    genderEntry.byTrack.set(
+      track,
+      (genderEntry.byTrack.get(track) || 0) + 1
+    );
+  });
+
+  const genders = Array.from(genderMap.values())
+    .sort((a, b) => {
+      return (
+        b.total - a.total ||
+        a.gender.localeCompare(b.gender, "pt-BR")
+      );
+    });
+
+  const tracks = Array.from(trackTotals.entries())
+    .sort((a, b) => {
+      return (
+        b[1] - a[1] ||
+        a[0].localeCompare(b[0], "pt-BR")
+      );
+    })
+    .map(([track]) => track);
+
+  return {
+    genders,
+    tracks,
+    genderTotals,
+    trackTotals,
+    total,
+    hasData: Boolean(genderHeader || trackHeader),
+  };
+}
+
+function normalizeLabel(value) {
+  return String(value ?? "")
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+function normalizeGenderLabel(value) {
+  const originalValue = normalizeLabel(value);
+
+  if (!originalValue) {
+    return "Não informado";
+  }
+
+  const normalizedKey = normalizeTextKey(originalValue);
+
+  const genderAliases = {
+    // Masculino
+    "homem": "Homem",
+    "homen": "Homem",
+    "home": "Homem",
+    "masculino": "Homem",
+    "masculina": "Homem",
+    "masc": "Homem",
+    "m": "Homem",
+
+    // Feminino
+    "mulher": "Mulher",
+    "feminino": "Mulher",
+    "femenino": "Mulher",
+    "feminina": "Mulher",
+    "femenina": "Mulher",
+    "fem": "Mulher",
+    "f": "Mulher",
+
+    // Não binário
+    "nao binario": "Não binário",
+    "nao binaria": "Não binário",
+    "nao-binario": "Não binário",
+    "nao-binaria": "Não binário",
+    "non binary": "Não binário",
+    "nb": "Não binário",
+
+    // Outros
+    "outro": "Outro",
+    "outra": "Outro",
+    "outros": "Outro",
+    "outras": "Outro",
+
+    // Prefere não informar
+    "prefiro nao informar": "Prefiro não informar",
+    "prefere nao informar": "Prefiro não informar",
+    "nao informar": "Prefiro não informar",
+    "nao declarado": "Prefiro não informar",
+    "nao declarada": "Prefiro não informar",
+  };
+
+  return genderAliases[normalizedKey] || originalValue;
+}
+
+function normalizeTextKey(value) {
+  return String(value ?? "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
+
+
+function renderGenderTrackSection(data) {
+  if (!els.genderTrackChart) return;
+
+  state.genderTrackData = data;
+
+  /*
+   * Remove apenas trilhas selecionadas que deixaram
+   * de existir nos dados atuais.
+   *
+   * Nenhuma trilha será selecionada automaticamente.
+   */
+  Array.from(state.activeTracks).forEach((track) => {
+    if (!data.tracks.includes(track)) {
+      state.activeTracks.delete(track);
+    }
+  });
+
+  if (els.genderTrackTotal) {
+    els.genderTrackTotal.textContent = formatNumber(data.total);
+  }
+
+  if (!data.hasData) {
+    if (els.genderTrackFilters) {
+      els.genderTrackFilters.innerHTML = "";
+    }
+
+    els.genderTrackChart.innerHTML = `
+      <div class="trend-empty">
+        As colunas "Gênero" e "Trilha" ainda não foram
+        sincronizadas na planilha pública.
+      </div>
+    `;
+
+    return;
+  }
+
+  renderTrackFilterChips(data);
+  renderGenderTrackChart(data);
+}
+
+
+
+function renderTrackFilterChips(data) {
+  if (!els.genderTrackFilters) return;
+
+  if (data.tracks.length === 0) {
+    els.genderTrackFilters.innerHTML = "";
+    return;
+  }
+
+  els.genderTrackFilters.innerHTML = data.tracks
+    .map((track, index) => {
+      const isActive = state.activeTracks.has(track);
+      const colorIndex = (index % 6) + 1;
+      const total = data.trackTotals.get(track) || 0;
+
+      return `
+        <button
+          type="button"
+          class="gender-chip ${isActive ? "active" : ""}"
+          data-track="${escapeAttribute(track)}"
+          style="--chip-color: var(--gender-${colorIndex})"
+          aria-pressed="${isActive}"
+          title="Filtrar pela trilha ${escapeAttribute(track)}"
+        >
+          <span
+            class="gender-chip-dot"
+            aria-hidden="true"
+          ></span>
+
+          <span>${escapeHtml(track)}</span>
+
+          <strong>${formatNumber(total)}</strong>
+        </button>
+      `;
+    })
+    .join("");
+
+  els.genderTrackFilters
+    .querySelectorAll("button[data-track]")
+    .forEach((button) => {
+      button.addEventListener("click", () => {
+        const track = button.dataset.track;
+
+        if (!track) return;
+
+        if (state.activeTracks.has(track)) {
+          /*
+           * Mantém pelo menos uma trilha selecionada.
+           */
+          if (state.activeTracks.size > 1) {
+            state.activeTracks.delete(track);
+          }
+        } else {
+          state.activeTracks.add(track);
+        }
+
+        renderTrackFilterChips(state.genderTrackData);
+        renderGenderTrackChart(state.genderTrackData);
+      });
+    });
+}
+
+function renderGenderTrackChart(data) {
+  if (!els.genderTrackChart) return;
+
+  if (data.genders.length === 0) {
+    els.genderTrackChart.innerHTML = `
+      <div class="trend-empty">
+        A coluna "Gênero" ainda não possui dados.
+      </div>
+    `;
+
+    return;
+  }
+
+  /*
+   * Mantém a ordem original das trilhas,
+   * mesmo após ativar ou desativar filtros.
+   */
+  const activeTracksInOrder = data.tracks.filter((track) => {
+    return state.activeTracks.has(track);
+  });
+
+  const trackColor = new Map(
+    data.tracks.map((track, index) => {
+      const colorIndex = (index % 6) + 1;
+
+      return [
+        track,
+        `var(--gender-${colorIndex})`,
+      ];
+    })
+  );
+
+  /*
+   * Calcula o total de cada gênero considerando
+   * apenas as trilhas atualmente selecionadas.
+   */
+  const visibleGenders = data.genders
+    .map((gender) => {
+      const visibleTotal = activeTracksInOrder.reduce(
+        (sum, track) => {
+          return sum + (gender.byTrack.get(track) || 0);
+        },
+        0
+      );
+
+      return {
+        ...gender,
+        visibleTotal,
+      };
+    })
+    .filter((gender) => gender.visibleTotal > 0)
+    .sort((a, b) => {
+      return (
+        b.visibleTotal - a.visibleTotal ||
+        a.gender.localeCompare(b.gender, "pt-BR")
+      );
+    });
+
+  if (visibleGenders.length === 0) {
+    els.genderTrackChart.innerHTML = `
+      <div class="trend-empty">
+        Nenhum registro encontrado para as trilhas selecionadas.
+      </div>
+    `;
+
+    return;
+  }
+
+  /*
+   * O maior total é usado como referência para a largura
+   * das barras, mantendo comparação visual entre gêneros.
+   */
+  const maxTotal = Math.max(
+    ...visibleGenders.map((gender) => gender.visibleTotal)
+  );
+
+  const rows = visibleGenders
+    .map((gender) => {
+      const segments = activeTracksInOrder
+        .map((track) => {
+          const count = gender.byTrack.get(track) || 0;
+
+          if (count === 0) return "";
+
+          const widthPercent = (count / maxTotal) * 100;
+          const color = trackColor.get(track);
+
+          return `
+            <span
+              class="track-bar-segment"
+              style="
+                width: ${widthPercent}%;
+                background: ${color};
+              "
+              title="${escapeAttribute(track)}: ${formatNumber(count)} inscrição${count !== 1 ? "ões" : ""}"
+            ></span>
+          `;
+        })
+        .join("");
+
+      return `
+        <div class="track-row">
+          <div class="track-row-label">
+            <span title="${escapeAttribute(gender.gender)}">
+              ${escapeHtml(gender.gender)}
+            </span>
+
+            <strong>
+              ${formatNumber(gender.visibleTotal)}
+            </strong>
+          </div>
+
+          <div
+            class="track-bar-track"
+            aria-label="${escapeAttribute(gender.gender)}: ${formatNumber(gender.visibleTotal)} inscrições"
+          >
+            ${segments}
+          </div>
+        </div>
+      `;
+    })
+    .join("");
+
+  els.genderTrackChart.innerHTML = `
+    <div class="track-rows">
+      ${rows}
+    </div>
+  `;
+}
+
+
+
 
 function findHeader(rows, expectedHeader) {
   if (!rows.length) return null;

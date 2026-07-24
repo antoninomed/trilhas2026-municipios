@@ -206,6 +206,31 @@
           </div>
           <p id="projection-basis" class="projection-basis">Ritmo dos últimos 7 dias</p>
         </article>
+
+        <section class="gender-track-card" aria-labelledby="gender-track-title">
+          <header class="trend-header">
+            <div>
+              <span class="trend-eyebrow">Distribuição das inscrições</span>
+              <h2 id="gender-track-title">Gênero por trilha selecionada</h2>
+            </div>
+            <div class="trend-summary" aria-live="polite">
+              <strong id="gender-track-total">0</strong>
+              <span>inscrições consideradas</span>
+            </div>
+          </header>
+
+          <div id="gender-track-filters" class="gender-track-filters" role="group" aria-label="Filtrar por trilha"></div>
+
+          <div
+            id="gender-track-chart"
+            class="gender-track-chart"
+            role="img"
+            aria-label="Distribuição de gênero nas trilhas selecionadas"
+            aria-live="polite"
+          >
+            <div class="trend-empty">Carregando distribuição por trilha...</div>
+          </div>
+        </section>
       </div>
     </section>
   </main>
