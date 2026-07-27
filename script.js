@@ -13,6 +13,8 @@ const CONFIG = {
 
   TRACK_COLUMN_NAME: "Trilha",
 
+  RESULT_COLUMN_NAME: "Resultado",
+
   MUNICIPALITIES_GEOJSON_URL: "https://raw.githubusercontent.com/tbrugz/geodata-br/master/geojson/geojs-21-mun.json",
 
   PAGE_SIZE: 10,
@@ -68,6 +70,8 @@ const state = {
   chartStartIndex: 0,
   genderTrackData: null,
   activeTracks: new Set(),
+  analyticsTrack: "",
+  analyticsGender: "",
 };
 
 const els = {
@@ -87,6 +91,7 @@ const els = {
   registeredCount: document.getElementById("registered-count"),
   missingCount: document.getElementById("missing-count"),
   totalRegistrations: document.getElementById("total-registrations"),
+  totalApproved: document.getElementById("total-approved"),
   trendChart: document.getElementById("trend-chart"),
   trendRange: document.getElementById("trend-range"),
   trendTotal: document.getElementById("trend-total"),
@@ -103,6 +108,13 @@ const els = {
   genderTrackChart: document.getElementById("gender-track-chart"),
   genderTrackFilters: document.getElementById("gender-track-filters"),
   genderTrackTotal: document.getElementById("gender-track-total"),
+  analyticsTrackFilter: document.getElementById("analytics-track-filter"),
+  analyticsGenderFilter: document.getElementById("analytics-gender-filter"),
+  analyticsClearFilters: document.getElementById("analytics-clear-filters"),
+  analyticsRegistrations: document.getElementById("analytics-registrations"),
+  analyticsApproved: document.getElementById("analytics-approved"),
+  analyticsApprovalRate: document.getElementById("analytics-approval-rate"),
+  analyticsTrackCount: document.getElementById("analytics-track-count"),
 };
 
 window.addEventListener("DOMContentLoaded", init);
@@ -118,6 +130,9 @@ async function init() {
 
     const rows = await loadRowsFromGoogleSheets();
     state.totalRegistrations = rows.length;
+    if (els.totalApproved) {
+      els.totalApproved.textContent = formatNumber(countApprovedRows(rows));
+    }
     state.dailyRegistrations = aggregateRowsByDate(rows);
     state.chartStartIndex = Math.max(0, state.dailyRegistrations.length - CONFIG.CHART_WINDOW_DAYS);
 
@@ -401,6 +416,30 @@ function setupEvents() {
     state.chartStartIndex += 1;
     renderRegistrationChart();
   });
+
+  if (els.analyticsTrackFilter) {
+    els.analyticsTrackFilter.addEventListener("change", () => {
+      state.analyticsTrack = els.analyticsTrackFilter.value;
+      renderGenderTrackChart(state.genderTrackData);
+    });
+  }
+
+  if (els.analyticsGenderFilter) {
+    els.analyticsGenderFilter.addEventListener("change", () => {
+      state.analyticsGender = els.analyticsGenderFilter.value;
+      renderGenderTrackChart(state.genderTrackData);
+    });
+  }
+
+  if (els.analyticsClearFilters) {
+    els.analyticsClearFilters.addEventListener("click", () => {
+      state.analyticsTrack = "";
+      state.analyticsGender = "";
+      if (els.analyticsTrackFilter) els.analyticsTrackFilter.value = "";
+      if (els.analyticsGenderFilter) els.analyticsGenderFilter.value = "";
+      renderGenderTrackChart(state.genderTrackData);
+    });
+  }
 
   window.addEventListener("resize", debounce(() => {
     if (state.dailyRegistrations.length > 0) renderRegistrationChart();
@@ -750,9 +789,19 @@ function parseRegistrationDate(value) {
   const text = String(value ?? "").trim();
   if (!text) return null;
 
-  const ptBrMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
-  if (ptBrMatch) {
-    return createValidatedDate(Number(ptBrMatch[3]), Number(ptBrMatch[2]), Number(ptBrMatch[1]));
+  const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (slashMatch) {
+    const first = Number(slashMatch[1]);
+    const second = Number(slashMatch[2]);
+    const year = Number(slashMatch[3]);
+
+    // A exportação da planilha pode vir em DD/MM/AAAA ou MM/DD/AAAA.
+    // Quando o segundo número é maior que 12, ele só pode representar o dia.
+    if (second > 12) return createValidatedDate(year, first, second);
+    if (first > 12) return createValidatedDate(year, second, first);
+
+    // Para datas ambíguas, a origem atual da planilha usa o padrão americano.
+    return createValidatedDate(year, first, second);
   }
 
   const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
@@ -896,86 +945,62 @@ function formatFullDate(date) {
 }
 
 
+function isApprovedResult(value) {
+  const key = normalizeTextKey(value);
+  return key === "aprovado" || key === "deferido" || key === "deferido" || key === "deferido";
+}
+
+function countApprovedRows(rows) {
+  const resultHeader = findHeader(rows, CONFIG.RESULT_COLUMN_NAME);
+  if (!resultHeader) return 0;
+  return rows.reduce((total, row) => total + (isApprovedResult(row[resultHeader]) ? 1 : 0), 0);
+}
+
 function aggregateByTrackAndGender(rows) {
   const UNINFORMED = "Não informado";
-
   const genderHeader = findHeader(rows, CONFIG.GENDER_COLUMN_NAME);
   const trackHeader = findHeader(rows, CONFIG.TRACK_COLUMN_NAME);
-
-  const genderTotals = new Map();
-  const trackTotals = new Map();
-  const genderMap = new Map();
-
-  let total = 0;
+  const resultHeader = findHeader(rows, CONFIG.RESULT_COLUMN_NAME);
+  const trackMap = new Map();
+  const genders = new Set();
 
   rows.forEach((row) => {
-    const rawTrack = trackHeader ? row[trackHeader] : "";
-    const rawGender = genderHeader ? row[genderHeader] : "";
+    const track = normalizeLabel(trackHeader ? row[trackHeader] : "") || UNINFORMED;
+    const gender = normalizeGenderLabel(genderHeader ? row[genderHeader] : "") || UNINFORMED;
+    const approved = resultHeader ? isApprovedResult(row[resultHeader]) : false;
+    genders.add(gender);
 
-    const track = normalizeLabel(rawTrack) || UNINFORMED;
-    const gender = normalizeLabel(rawGender) || UNINFORMED;
-
-    total += 1;
-
-    genderTotals.set(
-      gender,
-      (genderTotals.get(gender) || 0) + 1
-    );
-
-    trackTotals.set(
-      track,
-      (trackTotals.get(track) || 0) + 1
-    );
-
-    if (!genderMap.has(gender)) {
-      genderMap.set(gender, {
-        gender,
-        total: 0,
-        byTrack: new Map(),
-      });
+    if (!trackMap.has(track)) {
+      trackMap.set(track, { track, total: 0, approved: 0, byGender: new Map() });
     }
+    const entry = trackMap.get(track);
+    entry.total += 1;
+    if (approved) entry.approved += 1;
 
-    const genderEntry = genderMap.get(gender);
-
+    if (!entry.byGender.has(gender)) {
+      entry.byGender.set(gender, { total: 0, approved: 0 });
+    }
+    const genderEntry = entry.byGender.get(gender);
     genderEntry.total += 1;
-
-    genderEntry.byTrack.set(
-      track,
-      (genderEntry.byTrack.get(track) || 0) + 1
-    );
+    if (approved) genderEntry.approved += 1;
   });
 
-  const genders = Array.from(genderMap.values())
-    .sort((a, b) => {
-      return (
-        b.total - a.total ||
-        a.gender.localeCompare(b.gender, "pt-BR")
-      );
-    });
-
-  const tracks = Array.from(trackTotals.entries())
-    .sort((a, b) => {
-      return (
-        b[1] - a[1] ||
-        a[0].localeCompare(b[0], "pt-BR")
-      );
-    })
-    .map(([track]) => track);
+  const tracksData = Array.from(trackMap.values()).sort((a, b) =>
+    b.total - a.total || a.track.localeCompare(b.track, "pt-BR")
+  );
 
   return {
-    genders,
-    tracks,
-    genderTotals,
-    trackTotals,
-    total,
-    hasData: Boolean(genderHeader || trackHeader),
+    tracksData,
+    tracks: tracksData.map((item) => item.track),
+    genders: Array.from(genders).sort((a, b) => a.localeCompare(b, "pt-BR")),
+    total: rows.length,
+    hasData: Boolean(trackHeader),
+    hasResult: Boolean(resultHeader),
   };
 }
 
 function normalizeLabel(value) {
-  return String(value ?? "")
-    .trim()
-    .replace(/\s+/g, " ");
+  return String(value ?? "").trim().replace(/\s+/g, " ");
 }
 
 function normalizeGenderLabel(value) {
@@ -985,50 +1010,239 @@ function normalizeGenderLabel(value) {
     return "Não informado";
   }
 
-  const normalizedKey = normalizeTextKey(originalValue);
+  const key = normalizeTextKey(originalValue)
+    .replace(/[()[\]{}]/g, " ")
+    .replace(/[.,;:!?/\\|+*=]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 
-  const genderAliases = {
-    // Masculino
-    "homem": "Homem",
-    "homen": "Homem",
-    "home": "Homem",
-    "masculino": "Homem",
-    "masculina": "Homem",
-    "masc": "Homem",
-    "m": "Homem",
+  const compactKey = key.replace(/\s+/g, "");
 
-    // Feminino
-    "mulher": "Mulher",
-    "feminino": "Mulher",
-    "femenino": "Mulher",
-    "feminina": "Mulher",
-    "femenina": "Mulher",
-    "fem": "Mulher",
-    "f": "Mulher",
+  const genderGroups = [
+    {
+      label: "Homem cisgênero",
+      values: [
+        "homem",
+        "homen",
+        "home",
+        "homem cis",
+        "homem cisgenero",
+        "homem cis genero",
+        "masculino",
+        "masculina",
+        "sexo masculino",
+        "genero masculino",
+        "masc",
+        "m",
+      ],
+    },
+    {
+      label: "Mulher cisgênero",
+      values: [
+        "mulher",
+        "mulhe",
+        "mulher cis",
+        "mulher cisgenero",
+        "mulher cis genero",
+        "feminino",
+        "feminina",
+        "femenino",
+        "femenina",
+        "sexo feminino",
+        "genero feminino",
+        "fem",
+        "f",
+      ],
+    },
+    {
+      label: "Homem trans",
+      values: [
+        "homem trans",
+        "homem transgenero",
+        "homem trans genero",
+        "homem transexual",
+        "masculino trans",
+        "transmasculino",
+        "trans masculino",
+        "homem transgender",
+      ],
+    },
+    {
+      label: "Mulher trans",
+      values: [
+        "mulher trans",
+        "mulher transgenero",
+        "mulher trans genero",
+        "mulher transexual",
+        "feminino trans",
+        "transfeminina",
+        "trans feminina",
+        "mulher transgender",
+      ],
+    },
+    {
+      label: "Pessoa não binária",
+      values: [
+        "nao binario",
+        "nao binaria",
+        "pessoa nao binaria",
+        "pessoa nao binario",
+        "nao binarie",
+        "non binary",
+        "nonbinary",
+        "nb",
+        "genero nao binario",
+        "genero fluido",
+        "genero fluida",
+        "genderfluid",
+        "gender fluid",
+        "agenero",
+        "agenera",
+        "agender",
+        "bigenero",
+        "bigenera",
+      ],
+    },
+    {
+      label: "Travesti",
+      values: [
+        "travesti",
+      ],
+    },
+    {
+      label: "Outro gênero",
+      values: [
+        "outro",
+        "outra",
+        "outros",
+        "outras",
+        "outro genero",
+        "outra identidade",
+        "outra identidade de genero",
+      ],
+    },
+    {
+      label: "Prefere não informar",
+      values: [
+        "prefiro nao informar",
+        "prefere nao informar",
+        "nao quero informar",
+        "nao informar",
+        "nao declarado",
+        "nao declarada",
+        "nao desejo informar",
+        "prefiro nao responder",
+        "nao se aplica",
+        "sem declaracao",
+      ],
+    },
+    {
+      label: "Não informado",
+      values: [
+        "nao informado",
+        "nao informada",
+        "sem informacao",
+        "ignorado",
+        "ignorada",
+        "n a",
+        "na",
+        "null",
+        "undefined",
+        "-",
+        "--",
+      ],
+    },
+  ];
 
-    // Não binário
-    "nao binario": "Não binário",
-    "nao binaria": "Não binário",
-    "nao-binario": "Não binário",
-    "nao-binaria": "Não binário",
-    "non binary": "Não binário",
-    "nb": "Não binário",
+  for (const group of genderGroups) {
+    const matches = group.values.some((candidate) => {
+      const candidateKey = normalizeTextKey(candidate);
+      const candidateCompact = candidateKey.replace(/\s+/g, "");
 
-    // Outros
-    "outro": "Outro",
-    "outra": "Outro",
-    "outros": "Outro",
-    "outras": "Outro",
+      return key === candidateKey || compactKey === candidateCompact;
+    });
 
-    // Prefere não informar
-    "prefiro nao informar": "Prefiro não informar",
-    "prefere nao informar": "Prefiro não informar",
-    "nao informar": "Prefiro não informar",
-    "nao declarado": "Prefiro não informar",
-    "nao declarada": "Prefiro não informar",
-  };
+    if (matches) {
+      return group.label;
+    }
+  }
 
-  return genderAliases[normalizedKey] || originalValue;
+  /*
+   * Verificações adicionais para textos mais longos,
+   * como "sou uma mulher trans" ou "me identifico como não binário".
+   */
+
+  const hasTransTerm =
+    /\btrans\b/.test(key) ||
+    /\btransgenero\b/.test(key) ||
+    /\btransexual\b/.test(key) ||
+    /\btransgender\b/.test(key);
+
+  const hasCisTerm =
+    /\bcis\b/.test(key) ||
+    /\bcisgenero\b/.test(key);
+
+  const hasManTerm =
+    /\bhomem\b/.test(key) ||
+    /\bmasculino\b/.test(key) ||
+    /\bmasculina\b/.test(key);
+
+  const hasWomanTerm =
+    /\bmulher\b/.test(key) ||
+    /\bfeminino\b/.test(key) ||
+    /\bfeminina\b/.test(key) ||
+    /\bfemenino\b/.test(key) ||
+    /\bfemenina\b/.test(key);
+
+  if (hasManTerm && hasTransTerm) {
+    return "Homem trans";
+  }
+
+  if (hasWomanTerm && hasTransTerm) {
+    return "Mulher trans";
+  }
+
+  if (hasManTerm && hasCisTerm) {
+    return "Homem cisgênero";
+  }
+
+  if (hasWomanTerm && hasCisTerm) {
+    return "Mulher cisgênero";
+  }
+
+  if (
+    /\bnao binario\b/.test(key) ||
+    /\bnao binaria\b/.test(key) ||
+    /\bnao binarie\b/.test(key) ||
+    /\bnon binary\b/.test(key) ||
+    /\bnonbinary\b/.test(key) ||
+    /\bgenero fluido\b/.test(key) ||
+    /\bgenderfluid\b/.test(key) ||
+    /\bagenero\b/.test(key) ||
+    /\bagenera\b/.test(key) ||
+    /\bagender\b/.test(key)
+  ) {
+    return "Pessoa não binária";
+  }
+
+  if (/\btravesti\b/.test(key)) {
+    return "Travesti";
+  }
+
+  if (
+    /\bprefiro nao informar\b/.test(key) ||
+    /\bprefere nao informar\b/.test(key) ||
+    /\bprefiro nao responder\b/.test(key) ||
+    /\bnao desejo informar\b/.test(key)
+  ) {
+    return "Prefere não informar";
+  }
+
+  /*
+   * Uma identidade não reconhecida não é descartada.
+   * Ela permanece com o texto informado pela pessoa.
+   */
+  return originalValue;
 }
 
 function normalizeTextKey(value) {
@@ -1037,245 +1251,280 @@ function normalizeTextKey(value) {
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase()
     .trim()
+    .replace(/[-_]/g, " ")
     .replace(/\s+/g, " ");
 }
 
-
-
 function renderGenderTrackSection(data) {
   if (!els.genderTrackChart) return;
-
   state.genderTrackData = data;
 
-  /*
-   * Remove apenas trilhas selecionadas que deixaram
-   * de existir nos dados atuais.
-   *
-   * Nenhuma trilha será selecionada automaticamente.
-   */
-  Array.from(state.activeTracks).forEach((track) => {
-    if (!data.tracks.includes(track)) {
-      state.activeTracks.delete(track);
-    }
-  });
-
-  if (els.genderTrackTotal) {
-    els.genderTrackTotal.textContent = formatNumber(data.total);
-  }
-
   if (!data.hasData) {
-    if (els.genderTrackFilters) {
-      els.genderTrackFilters.innerHTML = "";
-    }
-
-    els.genderTrackChart.innerHTML = `
-      <div class="trend-empty">
-        As colunas "Gênero" e "Trilha" ainda não foram
-        sincronizadas na planilha pública.
-      </div>
-    `;
-
+    els.genderTrackChart.innerHTML = '<div class="trend-empty">A coluna “Trilha” não foi encontrada na planilha pública.</div>';
     return;
   }
 
-  renderTrackFilterChips(data);
+  if (els.analyticsTrackFilter) {
+    els.analyticsTrackFilter.innerHTML = '<option value="">Todas as trilhas</option>' + data.tracks
+      .map((track) => `<option value="${escapeAttribute(track)}">${escapeHtml(track)}</option>`).join("");
+    els.analyticsTrackFilter.value = state.analyticsTrack;
+  }
+
+  if (els.analyticsGenderFilter) {
+    els.analyticsGenderFilter.innerHTML = '<option value="">Todos os gêneros</option>' + data.genders
+      .map((gender) => `<option value="${escapeAttribute(gender)}">${escapeHtml(gender)}</option>`).join("");
+    els.analyticsGenderFilter.value = state.analyticsGender;
+  }
+
   renderGenderTrackChart(data);
 }
 
-
-
-function renderTrackFilterChips(data) {
-  if (!els.genderTrackFilters) return;
-
-  if (data.tracks.length === 0) {
-    els.genderTrackFilters.innerHTML = "";
-    return;
-  }
-
-  els.genderTrackFilters.innerHTML = data.tracks
-    .map((track, index) => {
-      const isActive = state.activeTracks.has(track);
-      const colorIndex = (index % 6) + 1;
-      const total = data.trackTotals.get(track) || 0;
-
-      return `
-        <button
-          type="button"
-          class="gender-chip ${isActive ? "active" : ""}"
-          data-track="${escapeAttribute(track)}"
-          style="--chip-color: var(--gender-${colorIndex})"
-          aria-pressed="${isActive}"
-          title="Filtrar pela trilha ${escapeAttribute(track)}"
-        >
-          <span
-            class="gender-chip-dot"
-            aria-hidden="true"
-          ></span>
-
-          <span>${escapeHtml(track)}</span>
-
-          <strong>${formatNumber(total)}</strong>
-        </button>
-      `;
-    })
-    .join("");
-
-  els.genderTrackFilters
-    .querySelectorAll("button[data-track]")
-    .forEach((button) => {
-      button.addEventListener("click", () => {
-        const track = button.dataset.track;
-
-        if (!track) return;
-
-        if (state.activeTracks.has(track)) {
-          /*
-           * Mantém pelo menos uma trilha selecionada.
-           */
-          if (state.activeTracks.size > 1) {
-            state.activeTracks.delete(track);
-          }
-        } else {
-          state.activeTracks.add(track);
-        }
-
-        renderTrackFilterChips(state.genderTrackData);
-        renderGenderTrackChart(state.genderTrackData);
-      });
-    });
-}
-
 function renderGenderTrackChart(data) {
-  if (!els.genderTrackChart) return;
-
-  if (data.genders.length === 0) {
-    els.genderTrackChart.innerHTML = `
-      <div class="trend-empty">
-        A coluna "Gênero" ainda não possui dados.
-      </div>
-    `;
-
+  if (!data || !els.genderTrackChart) {
     return;
   }
 
-  /*
-   * Mantém a ordem original das trilhas,
-   * mesmo após ativar ou desativar filtros.
-   */
-  const activeTracksInOrder = data.tracks.filter((track) => {
-    return state.activeTracks.has(track);
-  });
+  const selectedTrack = state.analyticsTrack;
+  const selectedGender = state.analyticsGender;
 
-  const trackColor = new Map(
-    data.tracks.map((track, index) => {
-      const colorIndex = (index % 6) + 1;
-
-      return [
-        track,
-        `var(--gender-${colorIndex})`,
-      ];
+  const visibleTracks = data.tracksData
+    .filter((item) => {
+      return !selectedTrack || item.track === selectedTrack;
     })
-  );
+    .map((item) => {
+      if (!selectedGender) {
+        return {
+          ...item,
+          displayTotal: item.total,
+          displayApproved: item.approved,
+        };
+      }
 
-  /*
-   * Calcula o total de cada gênero considerando
-   * apenas as trilhas atualmente selecionadas.
-   */
-  const visibleGenders = data.genders
-    .map((gender) => {
-      const visibleTotal = activeTracksInOrder.reduce(
-        (sum, track) => {
-          return sum + (gender.byTrack.get(track) || 0);
-        },
-        0
-      );
+      const genderData = item.byGender.get(selectedGender) || {
+        total: 0,
+        approved: 0,
+      };
 
       return {
-        ...gender,
-        visibleTotal,
+        ...item,
+        displayTotal: genderData.total,
+        displayApproved: genderData.approved,
       };
     })
-    .filter((gender) => gender.visibleTotal > 0)
-    .sort((a, b) => {
-      return (
-        b.visibleTotal - a.visibleTotal ||
-        a.gender.localeCompare(b.gender, "pt-BR")
-      );
-    });
+    .filter((item) => item.displayTotal > 0);
 
-  if (visibleGenders.length === 0) {
+  const registrations = visibleTracks.reduce(
+    (sum, item) => sum + item.displayTotal,
+    0,
+  );
+
+  const approved = visibleTracks.reduce(
+    (sum, item) => sum + item.displayApproved,
+    0,
+  );
+
+  const approvalRate = registrations
+    ? (approved / registrations) * 100
+    : 0;
+
+  if (els.genderTrackTotal) {
+    els.genderTrackTotal.textContent = formatNumber(registrations);
+  }
+
+  if (els.analyticsRegistrations) {
+    els.analyticsRegistrations.textContent = formatNumber(registrations);
+  }
+
+  if (els.analyticsApproved) {
+    els.analyticsApproved.textContent = formatNumber(approved);
+  }
+
+  if (els.analyticsApprovalRate) {
+    els.analyticsApprovalRate.textContent = formatPercentage(approvalRate);
+  }
+
+  if (els.analyticsTrackCount) {
+    els.analyticsTrackCount.textContent = formatNumber(
+      visibleTracks.length,
+    );
+  }
+
+  if (!data.hasResult) {
     els.genderTrackChart.innerHTML = `
       <div class="trend-empty">
-        Nenhum registro encontrado para as trilhas selecionadas.
+        A coluna “Resultado” não foi encontrada.
+        Verifique o cabeçalho da planilha.
       </div>
     `;
 
     return;
   }
 
-  /*
-   * O maior total é usado como referência para a largura
-   * das barras, mantendo comparação visual entre gêneros.
-   */
-  const maxTotal = Math.max(
-    ...visibleGenders.map((gender) => gender.visibleTotal)
+  if (!visibleTracks.length) {
+    els.genderTrackChart.innerHTML = `
+      <div class="trend-empty">
+        Nenhum registro corresponde aos filtros selecionados.
+      </div>
+    `;
+
+    return;
+  }
+
+  const maximum = Math.max(
+    ...visibleTracks.map((item) => item.displayTotal),
+    1,
   );
 
-  const rows = visibleGenders
-    .map((gender) => {
-      const segments = activeTracksInOrder
-        .map((track) => {
-          const count = gender.byTrack.get(track) || 0;
+  const trackRows = visibleTracks.map((item) => {
+    const trackApprovalRate = item.displayTotal
+      ? (item.displayApproved / item.displayTotal) * 100
+      : 0;
 
-          if (count === 0) return "";
+    const totalWidth = (
+      item.displayTotal / maximum
+    ) * 100;
 
-          const widthPercent = (count / maxTotal) * 100;
-          const color = trackColor.get(track);
+    const approvedWidth = item.displayTotal
+      ? (item.displayApproved / item.displayTotal) * 100
+      : 0;
 
-          return `
-            <span
-              class="track-bar-segment"
-              style="
-                width: ${widthPercent}%;
-                background: ${color};
-              "
-              title="${escapeAttribute(track)}: ${formatNumber(count)} inscrição${count !== 1 ? "ões" : ""}"
-            ></span>
-          `;
-        })
-        .join("");
+    /*
+     * Aqui são exibidos todos os gêneros encontrados
+     * na trilha, e não somente homem e mulher.
+     */
+    const genderBreakdown = Array.from(
+      item.byGender.entries(),
+    )
+      .filter(([, values]) => values.total > 0)
+      .sort((a, b) => {
+        const totalDifference = b[1].total - a[1].total;
 
-      return `
-        <div class="track-row">
-          <div class="track-row-label">
-            <span title="${escapeAttribute(gender.gender)}">
-              ${escapeHtml(gender.gender)}
-            </span>
+        if (totalDifference !== 0) {
+          return totalDifference;
+        }
 
-            <strong>
-              ${formatNumber(gender.visibleTotal)}
-            </strong>
+        return a[0].localeCompare(b[0], "pt-BR");
+      })
+      .map(([gender, values]) => {
+        const genderApprovalRate = values.total
+          ? (values.approved / values.total) * 100
+          : 0;
+
+        const pluralApproved =
+          values.approved === 1
+            ? "deferido"
+            : "deferidos";
+
+        const pluralRegistrations =
+          values.total === 1
+            ? "deferido"
+            : "deferidos";
+
+        return `
+          <span
+            class="analytics-gender-pill"
+            title="${escapeAttribute(gender)}:
+              ${formatNumber(values.total)} ${pluralRegistrations},
+              ${formatNumber(values.approved)} ${pluralApproved}
+              e ${formatPercentage(genderApprovalRate)} de deferimento"
+          >
+            <strong>${escapeHtml(gender)}</strong>
+
+            <small>
+              ${formatNumber(values.approved)}
+              deferidos de
+              ${formatNumber(values.total)}
+            </small>
+          </span>
+        `;
+      })
+      .join("");
+
+    return `
+      <article class="analytics-track-row">
+
+        <div class="analytics-track-name">
+          <strong>
+            ${escapeHtml(item.track)}
+          </strong>
+
+
+        </div>
+
+        <div class="analytics-track-visual">
+
+          <div
+            class="analytics-volume-bar"
+            title="Volume relativo entre as trilhas"
+          >
+            <span style="width: ${totalWidth}%"></span>
           </div>
 
           <div
-            class="track-bar-track"
-            aria-label="${escapeAttribute(gender.gender)}: ${formatNumber(gender.visibleTotal)} inscrições"
+            class="analytics-approval-bar"
+            title="${formatPercentage(trackApprovalRate)} de deferimento"
           >
-            ${segments}
+            <span style="width: ${approvedWidth}%"></span>
           </div>
+
         </div>
-      `;
-    })
-    .join("");
+
+        <div class="analytics-track-number">
+          <strong>
+            ${formatNumber(item.displayTotal)}
+          </strong>
+
+          <span>
+            inscrições
+          </span>
+        </div>
+
+
+        <div class="analytics-track-number approved-number">
+          <strong>
+            ${formatNumber(item.displayApproved)}
+          </strong>
+
+          <span>
+            deferidos
+          </span>
+        </div>
+
+        <div class="analytics-track-number">
+          <strong>
+            ${formatPercentage(trackApprovalRate)}
+          </strong>
+
+          <span>
+            deferimento
+          </span>
+        </div>
+
+
+      </article>
+    `;
+  }).join("");
 
   els.genderTrackChart.innerHTML = `
-    <div class="track-rows">
-      ${rows}
+    <div class="analytics-legend">
+
+      <span>
+        <i class="volume-dot"></i>
+        Inscrições
+      </span>
+
+      <span>
+        <i class="approved-dot"></i>
+        Deferidos dentro da trilha
+      </span>
+
+    </div>
+
+    <div class="analytics-track-list">
+      ${trackRows}
     </div>
   `;
 }
-
-
 
 
 function findHeader(rows, expectedHeader) {

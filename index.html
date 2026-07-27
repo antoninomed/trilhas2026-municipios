@@ -11,9 +11,9 @@
     integrity="sha256-p4NxAoJBhIINfQv8D3ssdmxn0fR1iMrHqBz0F3lZwds="
     crossorigin=""
   />
-  <link rel="stylesheet" href="styles.css?v=20260721-card-lateral-v2" />
+  <link rel="stylesheet" href="styles.css?v=20260727-analytics-v1" />
 </head>
-<body data-dashboard-version="20260721-card-lateral-v2">
+<body data-dashboard-version="20260727-analytics-v1">
   <main class="page-shell">
     <section class="dashboard-card" aria-labelledby="dashboard-title">
       <header class="dashboard-header">
@@ -30,8 +30,12 @@
 
         <div class="header-metrics" aria-label="Resumo das inscrições">
           <article class="metric-card">
-            <span class="metric-label">Inscrições Recebidas</span>
+            <span class="metric-label">Inscrições recebidas</span>
             <strong id="total-registrations">0</strong>
+          </article>
+          <article class="metric-card metric-card-success">
+            <span class="metric-label">Total de Deferidos</span>
+            <strong id="total-approved">0</strong>
           </article>
 
         </div>
@@ -207,28 +211,40 @@
           <p id="projection-basis" class="projection-basis">Ritmo dos últimos 7 dias</p>
         </article>
 
-        <section class="gender-track-card" aria-labelledby="gender-track-title">
-          <header class="trend-header">
+        <section class="gender-track-card track-analytics-card" aria-labelledby="gender-track-title">
+          <header class="trend-header analytics-header">
             <div>
-              <span class="trend-eyebrow">Distribuição das inscrições</span>
-              <h2 id="gender-track-title">Gênero por trilha selecionada</h2>
+              <span class="trend-eyebrow">Análise de resultado</span>
+              <h2 id="gender-track-title">Inscrições e deferidos por trilha</h2>
+              <p class="analytics-description">Compare resultado em cada trilha.</p>
             </div>
             <div class="trend-summary" aria-live="polite">
               <strong id="gender-track-total">0</strong>
-              <span>inscrições consideradas</span>
+              <span>registros filtrados</span>
             </div>
           </header>
 
-          <div id="gender-track-filters" class="gender-track-filters" role="group" aria-label="Filtrar por trilha"></div>
+          <div class="analytics-kpis" aria-live="polite">
+            <article class="analytics-kpi">
+              <span>Inscrições</span>
+              <strong id="analytics-registrations">0</strong>
+            </article>
+            <article class="analytics-kpi approved">
+              <span>Deferidos</span>
+              <strong id="analytics-approved">0</strong>
+            </article>
+            <article class="analytics-kpi">
+              <span>Taxa de aprovação</span>
+              <strong id="analytics-approval-rate">0%</strong>
+            </article>
+            <article class="analytics-kpi">
+              <span>Trilhas exibidas</span>
+              <strong id="analytics-track-count">0</strong>
+            </article>
+          </div>
 
-          <div
-            id="gender-track-chart"
-            class="gender-track-chart"
-            role="img"
-            aria-label="Distribuição de gênero nas trilhas selecionadas"
-            aria-live="polite"
-          >
-            <div class="trend-empty">Carregando distribuição por trilha...</div>
+          <div id="gender-track-chart" class="gender-track-chart analytics-table-wrap" aria-live="polite">
+            <div class="trend-empty">Carregando análise por trilha...</div>
           </div>
         </section>
       </div>
@@ -241,6 +257,6 @@
     crossorigin=""
   ></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="script.js?v=20260721-card-lateral-v2"></script>
+  <script src="script.js?v=20260727-analytics-v1"></script>
 </body>
 </html>

@@ -1494,3 +1494,97 @@ tbody tr.active-row {
     font-size: 9px;
   }
 }
+
+/* ===== Análise de inscrições e aprovações por trilha ===== */
+.metric-card-success strong { color: #16803c; }
+.analytics-description { margin: 7px 0 0; color: var(--muted); font-size: .84rem; }
+.analytics-filters { display: grid; grid-template-columns: minmax(220px, 1fr) minmax(190px, .7fr) auto; gap: 12px; align-items: end; margin: 20px 0 16px; padding: 16px; border: 1px solid #e4e9f1; border-radius: 10px; background: #f8fafc; }
+.analytics-filter { display: grid; gap: 7px; }
+.analytics-filter > span { color: #4b5563; font-size: .75rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+.analytics-filter select { width: 100%; height: 44px; padding: 0 38px 0 12px; border: 1px solid #d5dce7; border-radius: 8px; background: #fff; color: #172033; font: inherit; outline: none; }
+.analytics-filter select:focus { border-color: #8eb1e6; box-shadow: 0 0 0 4px rgba(61,126,219,.1); }
+.analytics-clear-button { height: 44px; padding: 0 16px; border: 1px solid #d5dce7; border-radius: 8px; background: #fff; color: #475569; font-weight: 750; }
+.analytics-clear-button:hover { border-color: #aeb9c8; background: #f8fafc; }
+.analytics-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin-bottom: 18px; }
+.analytics-kpi { min-width: 0; padding: 14px 16px; border: 1px solid #e2e7ef; border-radius: 9px; background: #fff; }
+.analytics-kpi span, .analytics-kpi strong { display: block; }
+.analytics-kpi span { margin-bottom: 6px; color: #64748b; font-size: .72rem; font-weight: 750; }
+.analytics-kpi strong { color: #172033; font-size: 1.35rem; line-height: 1; }
+.analytics-kpi.approved { background: #f1faf4; border-color: #cfe9d7; }
+.analytics-kpi.approved strong { color: #16803c; }
+.analytics-table-wrap { overflow: visible; }
+.analytics-legend { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-bottom: 10px; color: #64748b; font-size: .72rem; }
+.analytics-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.analytics-legend i { width: 9px; height: 9px; border-radius: 999px; display: inline-block; }
+.volume-dot { background: #cbd5e1; }.approved-dot { background: #29a35a; }.analytics-legend .legend-hint { margin-left: auto; }
+.analytics-track-list { display: grid; gap: 8px; }
+.analytics-track-row { display: grid; grid-template-columns: minmax(180px, 1.25fr) minmax(180px, 2fr) 100px 100px 150px; gap: 14px; align-items: center; padding: 13px 14px; border: 1px solid #e6eaf0; border-radius: 9px; background: #fff; transition: box-shadow .15s ease, border-color .15s ease; }
+.analytics-track-row:hover { border-color: #ccd7e5; box-shadow: 0 7px 18px rgba(15,23,42,.06); }
+.analytics-track-name { min-width: 0; }
+.analytics-track-name strong, .analytics-track-name span { display: block; }
+.analytics-track-name strong { overflow: hidden; color: #172033; font-size: .88rem; text-overflow: ellipsis; white-space: nowrap; }
+.analytics-track-name span { margin-top: 4px; color: #7b8494; font-size: .72rem; }
+.analytics-track-visual { display: grid; gap: 6px; }
+.analytics-volume-bar, .analytics-approval-bar { width: 100%; overflow: hidden; border-radius: 999px; }
+.analytics-volume-bar { height: 7px; background: #edf1f5; }.analytics-volume-bar span { display: block; height: 100%; background: #9eb0c4; border-radius: inherit; }
+.analytics-approval-bar { height: 10px; background: #e8f4ec; }.analytics-approval-bar span { display: block; height: 100%; background: #29a35a; border-radius: inherit; }
+.analytics-track-number { text-align: right; }.analytics-track-number strong, .analytics-track-number span { display: block; }
+.analytics-track-number strong { color: #263244; font-size: .98rem; }.analytics-track-number span { margin-top: 2px; color: #7b8494; font-size: .66rem; }
+.analytics-track-number.approved-number strong { color: #16803c; }
+.analytics-gender-breakdown { display: flex; justify-content: flex-end; gap: 6px; }
+.analytics-gender-breakdown span { min-width: 66px; padding: 6px 7px; border-radius: 7px; background: #f1f5f9; color: #475569; font-size: .7rem; font-weight: 800; text-align: center; }
+@media (max-width: 980px) { .analytics-track-row { grid-template-columns: minmax(170px,1fr) minmax(160px,1.5fr) 90px 90px; }.analytics-gender-breakdown { grid-column: 1 / -1; justify-content: flex-start; } }
+@media (max-width: 680px) { .analytics-filters { grid-template-columns: 1fr; }.analytics-kpis { grid-template-columns: 1fr 1fr; }.analytics-track-row { grid-template-columns: 1fr 1fr; gap: 10px; }.analytics-track-name, .analytics-track-visual { grid-column: 1 / -1; }.analytics-track-number { text-align: left; }.analytics-gender-breakdown { grid-column: 1 / -1; }.analytics-legend .legend-hint { width: 100%; margin-left: 0; } }
+
+
+
+.analytics-gender-breakdown {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.analytics-gender-pill {
+  min-width: 150px;
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 9px 12px;
+  border: 1px solid #dfe5ee;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: #334155;
+}
+
+.analytics-gender-pill strong {
+  font-size: 0.75rem;
+  line-height: 1.2;
+  font-weight: 800;
+}
+
+.analytics-gender-pill small {
+  color: #64748b;
+  font-size: 0.68rem;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+.analytics-gender-pill:hover {
+  border-color: #b8c8df;
+  background: #f1f6fc;
+}
+
+@media (max-width: 700px) {
+  .analytics-gender-breakdown {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-gender-pill {
+    width: 100%;
+    min-width: 0;
+  }
+}
