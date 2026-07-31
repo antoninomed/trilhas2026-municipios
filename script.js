@@ -789,19 +789,16 @@ function parseRegistrationDate(value) {
   const text = String(value ?? "").trim();
   if (!text) return null;
 
-  const slashMatch = text.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  const slashMatch = text.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/
+  );
+
   if (slashMatch) {
-    const first = Number(slashMatch[1]);
-    const second = Number(slashMatch[2]);
+    const day = Number(slashMatch[1]);
+    const month = Number(slashMatch[2]);
     const year = Number(slashMatch[3]);
 
-    // A exportação da planilha pode vir em DD/MM/AAAA ou MM/DD/AAAA.
-    // Quando o segundo número é maior que 12, ele só pode representar o dia.
-    if (second > 12) return createValidatedDate(year, first, second);
-    if (first > 12) return createValidatedDate(year, second, first);
-
-    // Para datas ambíguas, a origem atual da planilha usa o padrão americano.
-    return createValidatedDate(year, first, second);
+    return createValidatedDate(year, month, day);
   }
 
   const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
