@@ -648,36 +648,59 @@ function aggregateRowsByCity(rows) {
 
 function aggregateRowsByDate(rows) {
   const dateHeader = findHeader(rows, CONFIG.DATE_COLUMN_NAME);
-  if (!dateHeader) return [];
 
-  const totals = new Map();
-  let firstDate = null;
-  let lastDate = null;
+  if (!dateHeader) {
+    console.warn(
+      `A coluna de data "${CONFIG.DATE_COLUMN_NAME}" não foi encontrada.`
+    );
+
+    return [];
+  }
+
+  const totalsByDate = new Map();
 
   rows.forEach((row) => {
-    const date = parseRegistrationDate(row[dateHeader]);
-    if (!date) return;
+    const rawDate = row[dateHeader];
+    const date = parseRegistrationDate(rawDate);
+
+    if (!date) {
+      return;
+    }
 
     const key = toDateKey(date);
-    totals.set(key, (totals.get(key) || 0) + 1);
+    const currentTotal = totalsByDate.get(key) || 0;
 
-    if (!firstDate || date < firstDate) firstDate = date;
-    if (!lastDate || date > lastDate) lastDate = date;
+    totalsByDate.set(key, currentTotal + 1);
   });
 
-  if (!firstDate || !lastDate) return [];
+  if (totalsByDate.size === 0) {
+    return [];
+  }
 
-  const minimumStart = addDays(lastDate, -(CONFIG.CHART_WINDOW_DAYS - 1));
-  const rangeStart = firstDate > minimumStart ? minimumStart : firstDate;
+  const validDates = Array.from(totalsByDate.keys())
+    .map((key) => {
+      const [year, month, day] = key.split("-").map(Number);
+      return new Date(year, month - 1, day, 12);
+    })
+    .sort((a, b) => a - b);
+
+  const firstDate = validDates[0];
+  const lastDate = validDates[validDates.length - 1];
+
   const series = [];
+  let cursor = new Date(firstDate);
 
-  for (let cursor = new Date(rangeStart); cursor <= lastDate; cursor = addDays(cursor, 1)) {
+  while (cursor <= lastDate) {
     const date = new Date(cursor);
+    const key = toDateKey(date);
+
     series.push({
-      key: toDateKey(date),
+      key,
       date,
-      count: totals.get(toDateKey(date)) || 0,
+      count: totalsByDate.get(key) || 0,
     });
+
+    cursor = addDays(cursor, 1);
   }
 
   return series;
@@ -783,29 +806,44 @@ function formatPercentage(value) {
 
 function parseRegistrationDate(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
-    return new Date(value.getFullYear(), value.getMonth(), value.getDate(), 12);
+    return new Date(
+      value.getFullYear(),
+      value.getMonth(),
+      value.getDate(),
+      12,
+      0,
+      0
+    );
   }
 
   const text = String(value ?? "").trim();
   if (!text) return null;
 
-  const slashMatch = text.match(
-    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?/
+  // Formato da planilha: DD/MM/AAAA HH:mm:ss
+  const brazilianMatch = text.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2})(?::(\d{2}))?)?$/
   );
 
-  if (slashMatch) {
-    const day = Number(slashMatch[1]);
-    const month = Number(slashMatch[2]);
-    const year = Number(slashMatch[3]);
+  if (brazilianMatch) {
+    const day = Number(brazilianMatch[1]);
+    const month = Number(brazilianMatch[2]);
+    const year = Number(brazilianMatch[3]);
 
     return createValidatedDate(year, month, day);
   }
 
+  // Formato usado nas configurações: AAAA-MM-DD
   const isoMatch = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+
   if (isoMatch) {
-    return createValidatedDate(Number(isoMatch[1]), Number(isoMatch[2]), Number(isoMatch[3]));
+    const year = Number(isoMatch[1]);
+    const month = Number(isoMatch[2]);
+    const day = Number(isoMatch[3]);
+
+    return createValidatedDate(year, month, day);
   }
 
+  console.warn("Data não reconhecida:", value);
   return null;
 }
 
