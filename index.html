@@ -11,9 +11,9 @@
     integrity="sha256-p4NxAoJBhIINfQv8D3ssdmxn0fR1iMrHqBz0F3lZwds="
     crossorigin=""
   />
-  <link rel="stylesheet" href="styles.css?v=20260727-analytics-v1" />
+  <link rel="stylesheet" href="styles.css?v=20260904-trilheiros-cluster-v4" />
 </head>
-<body data-dashboard-version="20260727-analytics-v1">
+<body data-dashboard-version="20260904-trilheiros-cluster-v4">
   <main class="page-shell">
     <section class="dashboard-card" aria-labelledby="dashboard-title">
       <header class="dashboard-header">
@@ -41,6 +41,22 @@
         </div>
       </header>
 
+      <nav class="dashboard-section-nav" aria-label="Seções do dashboard">
+        <button id="nav-inscritos" class="dashboard-section-button active" type="button" data-dashboard-view="inscritos" aria-pressed="true">
+          <span class="section-button-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M16 11c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3Zm-8 0c1.66 0 3-1.34 3-3S9.66 5 8 5 5 6.34 5 8s1.34 3 3 3Zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5C15 14.17 10.33 13 8 13Zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5Z"/></svg>
+          </span>
+          <span><strong>Inscritos</strong><small>Inscrições e alcance do programa</small></span>
+        </button>
+        <button id="nav-trilheiros" class="dashboard-section-button" type="button" data-dashboard-view="trilheiros" aria-pressed="false">
+          <span class="section-button-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 8.18-4.09V14H22V7L12 2Zm-6 9.18V16l6 3 6-3v-4.82l-6 3-6-3Z"/></svg>
+          </span>
+          <span><strong>Trilheiros</strong><small>Participantes aprovados nas trilhas</small></span>
+        </button>
+      </nav>
+
+      <section id="view-inscritos" class="dashboard-view active" data-view="inscritos">
       <div class="dashboard-grid">
         <section class="map-card" aria-label="Mapa de inscrições por município no Maranhão">
           <div id="map" class="map"></div>
@@ -245,6 +261,64 @@
           </div>
         </section>
       </div>
+      </section>
+
+      <section id="view-trilheiros" class="dashboard-view" data-view="trilheiros" hidden>
+        <div class="trilheiros-intro">
+          <div>
+            <span class="trend-eyebrow">Acompanhamento dos participantes</span>
+            <h2>Visão geral dos Trilheiros</h2>
+            <p>Participantes aprovados e vinculados às trilhas, com visão consolidada por trilha e município.</p>
+          </div>
+        </div>
+
+        <div class="trilheiros-kpi-grid" aria-label="Indicadores dos trilheiros">
+          <article class="trilheiros-kpi-card primary">
+            <span>Total de Trilheiros</span>
+            <strong id="trilheiros-total">—</strong>
+            <small>Participantes ativos na base</small>
+          </article>
+
+          <article class="trilheiros-kpi-card">
+            <span>Municípios representados</span>
+            <strong id="trilheiros-cities">—</strong>
+            <small>Origem dos participantes</small>
+          </article>
+
+        </div>
+
+        <div class="trilheiros-main-grid">
+          <section class="trilheiros-panel trilheiros-map-panel">
+            <header class="trilheiros-panel-header">
+              <div><span class="trend-eyebrow">Distribuição geográfica</span><h3>Mapa dos Trilheiros</h3></div>
+            </header>
+            <div id="trilheiros-map" class="trilheiros-map" aria-label="Mapa dos trilheiros por município"></div>
+            <div class="trilheiros-map-legend" aria-label="Legenda do mapa de trilheiros">
+              <strong>Trilheiros</strong>
+              <div><span class="legend-dot danger"></span>40 ou mais</div>
+              <div><span class="legend-dot warning"></span>20 a 39</div>
+              <div><span class="legend-dot notice"></span>5 a 19</div>
+              <div><span class="legend-dot success"></span>1 a 4</div>
+            </div>
+          </section>
+
+          <section class="trilheiros-panel trilheiros-city-panel">
+            <header class="trilheiros-panel-header">
+              <div>
+                <span class="trend-eyebrow">Detalhamento por município</span>
+                <h3 id="trilheiros-city-panel-title">Trilhas da cidade</h3>
+                <p id="trilheiros-city-panel-subtitle" class="trilheiros-city-panel-subtitle">Selecione uma cidade no mapa para visualizar a distribuição.</p>
+              </div>
+            </header>
+            <div id="trilheiros-track-chart" class="trilheiros-track-chart" aria-live="polite">
+              <div class="trilheiros-placeholder compact city-selection-placeholder">
+                <strong>Selecione uma cidade no mapa</strong>
+                <span>Clique em um marcador para ver em quais trilhas os participantes daquele município foram selecionados.</span>
+              </div>
+            </div>
+          </section>
+        </div>
+      </section>
     </section>
   </main>
 
@@ -254,6 +328,6 @@
     crossorigin=""
   ></script>
   <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
-  <script src="script.js?v=20260727-analytics-v1"></script>
+  <script src="script.js?v=20260904-trilheiros-cluster-v4"></script>
 </body>
 </html>

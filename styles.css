@@ -480,6 +480,55 @@ button {
   fill: currentColor;
 }
 
+.fullscreen-control {
+  width: 38px !important;
+  height: 38px !important;
+  display: grid !important;
+  place-items: center;
+  background: #fff !important;
+  color: #111827 !important;
+  text-decoration: none;
+}
+
+.fullscreen-control svg {
+  width: 20px;
+  height: 20px;
+  fill: currentColor;
+}
+
+.fullscreen-control .fullscreen-exit-icon {
+  display: none;
+}
+
+.fullscreen-control.is-active .fullscreen-enter-icon {
+  display: none;
+}
+
+.fullscreen-control.is-active .fullscreen-exit-icon {
+  display: block;
+}
+
+.map-card:fullscreen,
+.map-card:-webkit-full-screen {
+  width: 100vw;
+  height: 100vh;
+  min-height: 100vh;
+  border: 0;
+  border-radius: 0;
+  background: #eef2ed;
+}
+
+.map-card:fullscreen .map,
+.map-card:-webkit-full-screen .map {
+  width: 100%;
+  height: 100%;
+}
+
+.map-card:fullscreen .map-legend,
+.map-card:-webkit-full-screen .map-legend {
+  z-index: 1200;
+}
+
 .map-legend {
   position: absolute;
   left: 16px;
@@ -1587,4 +1636,387 @@ tbody tr.active-row {
     width: 100%;
     min-width: 0;
   }
+}
+
+/* =========================================================
+   Navegação principal: Inscritos / Trilheiros
+   ========================================================= */
+.dashboard-section-nav {
+  display: flex;
+  gap: 10px;
+  margin: 0 auto;
+  margin-bottom: 20px;
+  padding: 5px;
+  border: 1px solid #e1e6ee;
+  border-radius: 12px;
+  background: #f6f8fb;
+  width: fit-content;
+}
+
+.dashboard-section-button {
+  min-width: 230px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 15px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: #667085;
+  text-align: left;
+  transition: background 160ms ease, color 160ms ease, box-shadow 160ms ease;
+}
+
+.dashboard-section-button:hover { background: rgba(255,255,255,.72); color: #344054; }
+.dashboard-section-button.active {
+  background: #fff;
+  color: #1d4ed8;
+  box-shadow: 0 4px 12px rgba(15,23,42,.08);
+}
+.dashboard-section-button > span:last-child { display: flex; flex-direction: column; gap: 2px; }
+.dashboard-section-button strong { font-size: .9rem; line-height: 1.2; }
+.dashboard-section-button small { color: #8993a4; font-size: .68rem; font-weight: 600; }
+.dashboard-section-button.active small { color: #70809a; }
+.section-button-icon {
+  width: 34px; height: 34px; flex: 0 0 34px; display: grid; place-items: center;
+  border-radius: 8px; background: #e9eef6; color: #64748b;
+}
+.dashboard-section-button.active .section-button-icon { background: #eaf2ff; color: #2563eb; }
+.section-button-icon svg { width: 18px; height: 18px; fill: currentColor; }
+.dashboard-view[hidden] { display: none !important; }
+
+/* =========================================================
+   Painel base de Trilheiros
+   ========================================================= */
+#view-trilheiros { animation: dashboardViewIn 180ms ease; }
+@keyframes dashboardViewIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+
+.trilheiros-intro {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 20px;
+  margin-bottom: 22px; padding: 20px 22px; border: 1px solid #dfe6ef; border-radius: 12px;
+  background: linear-gradient(135deg,#f8fbff 0%,#fff 66%);
+}
+.trilheiros-intro h2 { margin: 4px 0 6px; font-size: 1.32rem; color: #172033; }
+.trilheiros-intro p { margin: 0; max-width: 760px; color: #667085; font-size: .86rem; line-height: 1.5; }
+.data-status-badge {
+  flex: 0 0 auto; padding: 7px 10px; border-radius: 999px; background: #fff7e8; color: #9a5b08;
+  border: 1px solid #f2d8a7; font-size: .68rem; font-weight: 800; text-transform: uppercase; letter-spacing: .04em;
+}
+.trilheiros-kpi-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-bottom: 20px; }
+.trilheiros-kpi-card {
+  min-height: 128px; padding: 18px; border: 1px solid #dfe5ee; border-radius: 11px; background: #fff;
+  box-shadow: 0 6px 18px rgba(15,23,42,.045);
+}
+.trilheiros-kpi-card.primary { background: linear-gradient(150deg,#f4f8ff,#fff); border-color: #cfe0f8; }
+.trilheiros-kpi-card > span { display:block; color:#687385; font-size:.72rem; font-weight:800; text-transform:uppercase; letter-spacing:.035em; }
+.trilheiros-kpi-card strong { display:block; margin:14px 0 5px; color:#172033; font-size:1.9rem; line-height:1; }
+.trilheiros-kpi-card.primary strong { color:#2563eb; }
+.trilheiros-kpi-card small { color:#98a2b3; font-size:.68rem; }
+
+.trilheiros-filter-card, .trilheiros-panel {
+  border: 1px solid #e0e5ec; border-radius: 11px; background:#fff; overflow:hidden;
+}
+.trilheiros-filter-card { margin-bottom:20px; padding:18px 20px; }
+.trilheiros-filter-heading, .trilheiros-panel-header { display:flex; align-items:center; justify-content:space-between; gap:16px; }
+.trilheiros-filter-heading { margin-bottom:14px; }
+.trilheiros-filter-heading h3, .trilheiros-panel-header h3 { margin:3px 0 0; font-size:1rem; color:#253047; }
+.trilheiros-clear-button { padding:8px 11px; border:1px solid #dfe4eb; border-radius:7px; background:#fff; color:#7d8796; font-size:.74rem; font-weight:700; }
+.trilheiros-clear-button:disabled { opacity:.55; cursor:not-allowed; }
+.trilheiros-filters { display:grid; grid-template-columns:minmax(260px,1.5fr) 1fr 1fr; gap:12px; }
+.trilheiros-field { display:flex; flex-direction:column; gap:6px; color:#667085; font-size:.69rem; font-weight:700; }
+.trilheiros-field input, .trilheiros-field select {
+  width:100%; height:42px; padding:0 12px; border:1px solid #d9e0e8; border-radius:8px; background:#f9fafb; color:#667085;
+}
+.trilheiros-field input:disabled, .trilheiros-field select:disabled { opacity:.75; cursor:not-allowed; }
+.trilheiros-main-grid { display:grid; grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr); gap:20px; margin-bottom:20px; }
+.trilheiros-panel-header { padding:17px 19px; border-bottom:1px solid #edf0f4; }
+.trilheiros-map-panel { min-height:390px; }
+.trilheiros-placeholder { min-height:305px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:8px; padding:28px; color:#8b95a5; text-align:center; background:linear-gradient(180deg,#fbfcfd,#f7f9fb); }
+.trilheiros-placeholder svg { width:48px; height:48px; margin-bottom:5px; fill:#bdc6d2; }
+.trilheiros-placeholder strong { color:#64748b; font-size:.88rem; }
+.trilheiros-placeholder span { max-width:430px; font-size:.72rem; line-height:1.5; }
+.trilheiros-placeholder.compact { min-height:305px; }
+.placeholder-bars { width:min(250px,80%); height:115px; display:flex; align-items:flex-end; justify-content:center; gap:12px; margin-bottom:10px; }
+.placeholder-bars span { width:24px; border-radius:5px 5px 0 0; background:#dfe6ef; }
+.placeholder-bars span:nth-child(1){height:48%}.placeholder-bars span:nth-child(2){height:78%}.placeholder-bars span:nth-child(3){height:58%}.placeholder-bars span:nth-child(4){height:92%}.placeholder-bars span:nth-child(5){height:67%}
+.trilheiros-table-panel { margin-bottom:2px; }
+.table-panel-header { padding-right:20px; }
+.table-count-placeholder { color:#8993a4; font-size:.72rem; font-weight:700; }
+.trilheiros-table-wrap { overflow-x:auto; }
+.trilheiros-table { width:100%; border-collapse:collapse; }
+.trilheiros-table th { padding:13px 18px; border-bottom:1px solid #e7ebf0; background:#f8fafc; color:#697386; font-size:.7rem; text-align:left; text-transform:uppercase; letter-spacing:.03em; }
+.trilheiros-table td { padding:17px 18px; border-bottom:1px solid #edf0f4; color:#4b5565; font-size:.78rem; }
+.trilheiros-empty { height:125px; text-align:center !important; color:#9aa3b1 !important; }
+
+@media (max-width: 1100px) {
+  .trilheiros-kpi-grid { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .trilheiros-main-grid { grid-template-columns:1fr; }
+}
+@media (max-width: 760px) {
+  .dashboard-section-nav { width:100%; }
+  .dashboard-section-button { min-width:0; flex:1; padding:10px; }
+  .dashboard-section-button small { display:none; }
+  .trilheiros-intro { flex-direction:column; }
+  .trilheiros-kpi-grid { grid-template-columns:1fr; }
+  .trilheiros-filters { grid-template-columns:1fr; }
+}
+
+/* =========================================================
+   Trilheiros — base conectada
+   ========================================================= */
+.data-status-badge.connected {
+  background: #ecfdf3;
+  color: #18794e;
+  border-color: #b8e6cd;
+}
+.data-status-badge.error {
+  background: #fff1f2;
+  color: #b42318;
+  border-color: #fecdd3;
+}
+
+.trilheiros-clear-button:not(:disabled) {
+  color: #315f9f;
+  border-color: #cbd9ec;
+  background: #f8fbff;
+}
+.trilheiros-clear-button:not(:disabled):hover {
+  background: #eef5ff;
+}
+
+.trilheiros-field input:not(:disabled),
+.trilheiros-field select:not(:disabled) {
+  background: #fff;
+  color: #344054;
+}
+.trilheiros-field input:focus,
+.trilheiros-field select:focus {
+  outline: none;
+  border-color: #a9c3e8;
+  box-shadow: 0 0 0 3px rgba(61,126,219,.09);
+}
+
+.trilheiros-map-panel {
+  position: relative;
+  overflow: hidden;
+}
+.trilheiros-map {
+  width: 100%;
+  height: 800px;
+  min-height: 390px;
+  background: #eef2ed;
+}
+.trilheiros-map .city-marker .city-label {
+  opacity: 1;
+  transform: translateY(0);
+}
+.trilheiros-map-legend {
+  position: absolute;
+  left: 14px;
+  bottom: 14px;
+  z-index: 500;
+  min-width: 130px;
+  padding: 10px 11px;
+  border: 1px solid rgba(15,23,42,.12);
+  border-radius: 8px;
+  background: rgba(255,255,255,.95);
+  box-shadow: 0 8px 18px rgba(15,23,42,.10);
+  color: #1f2937;
+  font-size: .72rem;
+}
+.trilheiros-map-legend strong { display:block; margin-bottom:7px; font-size:.78rem; }
+.trilheiros-map-legend div { display:flex; align-items:center; gap:7px; margin-top:6px; }
+.trilheiros-map-legend .legend-dot { width:10px; height:10px; }
+
+.trilheiros-track-chart {
+  min-height: 390px;
+  padding: 18px 20px 20px;
+  background: #fff;
+}
+.trilheiros-track-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+.trilheiros-track-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  color: #4b5565;
+  font-size: .73rem;
+}
+.trilheiros-track-row-header span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+.trilheiros-track-row-header strong {
+  flex: 0 0 auto;
+  color: #253047;
+  font-size: .75rem;
+}
+.trilheiros-track-bar {
+  height: 10px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #edf1f6;
+}
+.trilheiros-track-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg,#4c82cf,#75a4e5);
+  transition: width 260ms ease;
+}
+
+.trilheiro-name { color:#253047; font-weight:800; }
+.trilheiro-track-pill {
+  display:inline-block;
+  max-width: 280px;
+  padding:5px 8px;
+  border-radius:999px;
+  background:#eef5ff;
+  color:#315f9f;
+  font-size:.68rem;
+  font-weight:800;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  vertical-align:middle;
+}
+.trilheiros-table td:nth-child(2) { color:#667085; }
+.trilheiros-table td:nth-child(3) { white-space:nowrap; }
+
+@media (max-width: 760px) {
+  .trilheiros-map { height: 340px; min-height:340px; }
+  .trilheiros-track-chart { min-height: 0; }
+}
+
+/* =========================================================
+   Trilheiros — detalhamento por cidade
+   ========================================================= */
+.trilheiros-main-grid {
+  grid-template-columns: minmax(0, 1.65fr) minmax(320px, .95fr);
+  margin-bottom: 2px;
+}
+
+.trilheiros-city-panel {
+  min-height: 390px;
+}
+
+.trilheiros-city-panel-subtitle {
+  margin: 6px 0 0;
+  color: #7b8494;
+  font-size: .72rem;
+  line-height: 1.4;
+}
+
+.city-selection-placeholder span {
+  max-width: 360px;
+}
+
+.trilheiros-city-summary {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.trilheiros-city-summary > div {
+  padding: 13px 14px;
+  border: 1px solid #e3e9f1;
+  border-radius: 9px;
+  background: #f8fafc;
+}
+
+.trilheiros-city-summary span {
+  display: block;
+  margin-bottom: 5px;
+  color: #7b8494;
+  font-size: .65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.trilheiros-city-summary strong {
+  display: block;
+  color: #253047;
+  font-size: 1.35rem;
+  line-height: 1;
+}
+
+.trilheiros-city-div-icon {
+  background: transparent;
+  border: 0;
+  overflow: visible !important;
+}
+
+.trilheiros-city-marker {
+  position: relative;
+  width: 64px;
+  height: 64px;
+}
+
+.trilheiros-single-marker {
+  width: 64px;
+  height: 64px;
+  transition: transform 160ms ease, box-shadow 160ms ease;
+}
+
+.trilheiros-city-label {
+  position: absolute;
+  left: 50%;
+  top: 72px;
+  transform: translateX(-50%);
+  min-width: max-content;
+  max-width: 150px;
+  padding: 2px 5px;
+  border-radius: 4px;
+  background: rgba(255,255,255,.80);
+  color: #111827;
+  font-size: .72rem;
+  line-height: 1.15;
+  font-weight: 800;
+  text-align: center;
+  white-space: nowrap;
+  text-shadow: 0 1px 2px #fff;
+  pointer-events: none;
+}
+
+.trilheiros-city-marker.is-active .trilheiros-single-marker {
+  outline: 4px solid rgba(37, 99, 235, .30);
+  transform: scale(1.10);
+  box-shadow:
+    0 0 0 10px rgba(37,99,235,.12),
+    0 12px 22px rgba(15,23,42,.26);
+}
+
+.trilheiros-map .trilheiros-single-marker .cluster-total {
+  font-size: 1rem;
+}
+
+.trilheiros-map .trilheiros-single-marker .cluster-meta {
+  display: block;
+  margin-top: 4px;
+  font-size: .60rem;
+  font-weight: 700;
+  opacity: .92;
+}
+
+.tooltip-hint {
+  color: #64748b;
+  font-size: 10px;
+}
+
+@media (max-width: 1100px) {
+  .trilheiros-main-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .trilheiros-city-summary { grid-template-columns: 1fr; }
 }

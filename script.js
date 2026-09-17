@@ -3,6 +3,14 @@ const CONFIG = {
   GOOGLE_SHEETS_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vSmt2xY2g29WLrKdh1CUbTUA2dL_D_AD_5O2N42mFQSMM5wrhqs5m6Z7FYNJs0NjrLwD2I1imA_ke2K/pub?gid=0&single=true&output=csv",
   GOOGLE_SHEET_GID: "0",
 
+  TRILHEIROS_SHEETS_URL: "https://docs.google.com/spreadsheets/d/e/2PACX-1vQl0pbrKF9vkg38kOxFdBK0tCekgWGRCwDdQ9i6GWyIDID_FgG6v9XBW-aSCZpTRzMAPb1MUc4wBAlz/pub?gid=84050731&single=true&output=csv",
+  TRILHEIROS_SHEET_GID: "84050731",
+  TRILHEIROS_NAME_COLUMN: "NOME",
+  TRILHEIROS_EMAIL_COLUMN: "EMAIL",
+  TRILHEIROS_BIRTH_COLUMN: "DATA DE NASCIMENTO",
+  TRILHEIROS_TRACK_COLUMN: "TRILHA",
+  TRILHEIROS_CITY_COLUMN: "CIDADE",
+
   CITY_COLUMN_NAME: "Município",
 
   DATE_COLUMN_NAME: "Data",
@@ -72,10 +80,25 @@ const state = {
   activeTracks: new Set(),
   analyticsTrack: "",
   analyticsGender: "",
+  trilheirosRows: [],
+  trilheirosFilteredRows: [],
+  trilheirosSearch: "",
+  trilheirosTrack: "",
+  trilheirosCity: "",
+  trilheirosMap: null,
+  trilheirosMarkersLayer: null,
+  trilheirosBoundaryLayer: null,
+  trilheirosSelectedCityKey: null,
 };
 
 const els = {
   status: document.getElementById("dashboard-status"),
+  dashboardTitle: document.getElementById("dashboard-title"),
+  headerMetrics: document.querySelector(".header-metrics"),
+  navInscritos: document.getElementById("nav-inscritos"),
+  navTrilheiros: document.getElementById("nav-trilheiros"),
+  viewInscritos: document.getElementById("view-inscritos"),
+  viewTrilheiros: document.getElementById("view-trilheiros"),
   tableBody: document.getElementById("city-table-body"),
   search: document.getElementById("city-search"),
   sortButton: document.getElementById("sort-button"),
@@ -115,6 +138,20 @@ const els = {
   analyticsApproved: document.getElementById("analytics-approved"),
   analyticsApprovalRate: document.getElementById("analytics-approval-rate"),
   analyticsTrackCount: document.getElementById("analytics-track-count"),
+  trilheirosDataStatus: document.getElementById("trilheiros-data-status"),
+  trilheirosTotal: document.getElementById("trilheiros-total"),
+  trilheirosTracks: document.getElementById("trilheiros-tracks"),
+  trilheirosCities: document.getElementById("trilheiros-cities"),
+  trilheirosAverage: document.getElementById("trilheiros-average"),
+  trilheirosSearch: document.getElementById("trilheiros-search"),
+  trilheirosTrackFilter: document.getElementById("trilheiros-track-filter"),
+  trilheirosCityFilter: document.getElementById("trilheiros-city-filter"),
+  trilheirosClearFilters: document.getElementById("trilheiros-clear-filters"),
+  trilheirosTrackChart: document.getElementById("trilheiros-track-chart"),
+  trilheirosCityPanelTitle: document.getElementById("trilheiros-city-panel-title"),
+  trilheirosCityPanelSubtitle: document.getElementById("trilheiros-city-panel-subtitle"),
+  trilheirosTableBody: document.getElementById("trilheiros-table-body"),
+  trilheirosTableCount: document.getElementById("trilheiros-table-count"),
 };
 
 window.addEventListener("DOMContentLoaded", init);
@@ -165,6 +202,8 @@ async function init() {
       els.genderTrackChart.innerHTML = `<div class="trend-empty">Erro ao carregar os dados.</div>`;
     }
   }
+
+  await loadAndRenderTrilheiros();
 }
 
 
@@ -297,6 +336,37 @@ function setupMap() {
 
   state.map.addControl(new HomeControl());
 
+  const FullscreenControl = L.Control.extend({
+    options: { position: "bottomright" },
+    onAdd() {
+      const container = L.DomUtil.create("a", "fullscreen-control leaflet-bar-part");
+      container.href = "#";
+      container.title = "Exibir mapa em tela cheia";
+      container.setAttribute("aria-label", "Exibir mapa em tela cheia");
+      container.innerHTML = `
+        <svg class="fullscreen-enter-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 9V4h5v2H6v3H4Zm11-5h5v5h-2V6h-3V4ZM4 15h2v3h3v2H4v-5Zm14 0h2v5h-5v-2h3v-3Z"/>
+        </svg>
+        <svg class="fullscreen-exit-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M9 4v5H4V7h3V4h2Zm6 0h2v3h3v2h-5V4ZM4 15h5v5H7v-3H4v-2Zm11 0h5v2h-3v3h-2v-5Z"/>
+        </svg>
+      `;
+
+      L.DomEvent.disableClickPropagation(container);
+      L.DomEvent.on(container, "click", (event) => {
+        L.DomEvent.preventDefault(event);
+        toggleMapFullscreen();
+      });
+
+      return container;
+    },
+  });
+
+  state.map.addControl(new FullscreenControl());
+
+  document.addEventListener("fullscreenchange", handleMapFullscreenChange);
+  document.addEventListener("webkitfullscreenchange", handleMapFullscreenChange);
+
   state.map.on("zoomend", updateMapVisualDensity);
 
   requestAnimationFrame(() => {
@@ -319,6 +389,47 @@ function setupMap() {
   });
 }
 
+
+function getFullscreenElement() {
+  return document.fullscreenElement || document.webkitFullscreenElement || null;
+}
+
+function toggleMapFullscreen() {
+  const mapCard = document.querySelector(".map-card");
+  if (!mapCard) return;
+
+  if (getFullscreenElement()) {
+    const exitFullscreen = document.exitFullscreen || document.webkitExitFullscreen;
+    if (exitFullscreen) exitFullscreen.call(document);
+    return;
+  }
+
+  const requestFullscreen = mapCard.requestFullscreen || mapCard.webkitRequestFullscreen;
+  if (requestFullscreen) {
+    requestFullscreen.call(mapCard).catch?.((error) => {
+      console.warn("Não foi possível abrir o mapa em tela cheia:", error);
+    });
+  }
+}
+
+function handleMapFullscreenChange() {
+  const mapCard = document.querySelector(".map-card");
+  const control = document.querySelector(".fullscreen-control");
+  const isMapFullscreen = Boolean(mapCard && getFullscreenElement() === mapCard);
+
+  mapCard?.classList.toggle("is-fullscreen", isMapFullscreen);
+
+  if (control) {
+    control.classList.toggle("is-active", isMapFullscreen);
+    control.title = isMapFullscreen ? "Sair da tela cheia" : "Exibir mapa em tela cheia";
+    control.setAttribute("aria-label", control.title);
+  }
+
+  setTimeout(() => {
+    forceMapResize();
+    updateMapVisualDensity();
+  }, 80);
+}
 
 function forceMapResize() {
   if (!state.map) return;
@@ -346,7 +457,72 @@ function updateMapVisualDensity() {
   mapElement.classList.toggle("show-city-labels", state.map.getZoom() >= 8);
 }
 
+function setDashboardView(view) {
+  const isTrilheiros = view === "trilheiros";
+
+  els.viewInscritos?.toggleAttribute("hidden", isTrilheiros);
+  els.viewTrilheiros?.toggleAttribute("hidden", !isTrilheiros);
+  els.viewInscritos?.classList.toggle("active", !isTrilheiros);
+  els.viewTrilheiros?.classList.toggle("active", isTrilheiros);
+
+  els.navInscritos?.classList.toggle("active", !isTrilheiros);
+  els.navTrilheiros?.classList.toggle("active", isTrilheiros);
+  els.navInscritos?.setAttribute("aria-pressed", String(!isTrilheiros));
+  els.navTrilheiros?.setAttribute("aria-pressed", String(isTrilheiros));
+
+  if (els.dashboardTitle) {
+    els.dashboardTitle.textContent = isTrilheiros
+      ? "Trilhas 2026: Painel de Trilheiros"
+      : "Trilhas 2026: Mapa de Alcance";
+  }
+
+  if (els.headerMetrics) els.headerMetrics.hidden = isTrilheiros;
+  if (els.status) els.status.hidden = isTrilheiros || !els.status.textContent.trim();
+
+  if (!isTrilheiros) {
+    setTimeout(() => {
+      forceMapResize();
+      updateMapVisualDensity();
+    }, 60);
+  } else {
+    setTimeout(() => {
+      if (state.trilheirosMap) {
+        state.trilheirosMap.invalidateSize({ animate: false });
+        fitTrilheirosMapToMarkers();
+      }
+    }, 80);
+  }
+}
+
 function setupEvents() {
+  els.navInscritos?.addEventListener("click", () => setDashboardView("inscritos"));
+  els.navTrilheiros?.addEventListener("click", () => setDashboardView("trilheiros"));
+
+  els.trilheirosSearch?.addEventListener("input", () => {
+    state.trilheirosSearch = els.trilheirosSearch.value;
+    applyTrilheirosFiltersAndRender();
+  });
+
+  els.trilheirosTrackFilter?.addEventListener("change", () => {
+    state.trilheirosTrack = els.trilheirosTrackFilter.value;
+    applyTrilheirosFiltersAndRender();
+  });
+
+  els.trilheirosCityFilter?.addEventListener("change", () => {
+    state.trilheirosCity = els.trilheirosCityFilter.value;
+    applyTrilheirosFiltersAndRender();
+  });
+
+  els.trilheirosClearFilters?.addEventListener("click", () => {
+    state.trilheirosSearch = "";
+    state.trilheirosTrack = "";
+    state.trilheirosCity = "";
+    if (els.trilheirosSearch) els.trilheirosSearch.value = "";
+    if (els.trilheirosTrackFilter) els.trilheirosTrackFilter.value = "";
+    if (els.trilheirosCityFilter) els.trilheirosCityFilter.value = "";
+    applyTrilheirosFiltersAndRender();
+  });
+
   els.showRegistered.addEventListener("click", () => {
     setViewMode("registered");
   });
@@ -1561,6 +1737,301 @@ function renderGenderTrackChart(data) {
   `;
 }
 
+
+
+async function loadAndRenderTrilheiros() {
+  try {
+    setTrilheirosDataStatus("Carregando base", "loading");
+    const rows = await loadRowsFromUrl(CONFIG.TRILHEIROS_SHEETS_URL, CONFIG.TRILHEIROS_SHEET_GID);
+    state.trilheirosRows = normalizeTrilheirosRows(rows);
+    state.trilheirosFilteredRows = [...state.trilheirosRows];
+    setupTrilheirosMap();
+    renderTrilheirosKpis();
+    renderTrilheirosMapMarkers();
+    renderTrilheirosSelectedCity();
+    setTrilheirosDataStatus("Base conectada", "connected");
+  } catch (error) {
+    console.error("Erro ao carregar Trilheiros:", error);
+    setTrilheirosDataStatus("Erro ao carregar", "error");
+    if (els.trilheirosTableBody) {
+      els.trilheirosTableBody.innerHTML = `<tr><td colspan="5" class="empty-state trilheiros-empty">Não foi possível carregar a planilha de Trilheiros.</td></tr>`;
+    }
+    if (els.trilheirosTrackChart) {
+      els.trilheirosTrackChart.innerHTML = `<div class="trilheiros-placeholder compact"><strong>Não foi possível carregar os dados por município.</strong></div>`;
+    }
+  }
+}
+
+async function loadRowsFromUrl(url, gid = "0") {
+  const csvUrl = normalizeGoogleSheetsUrl(url, gid);
+  const response = await fetch(csvUrl);
+  if (!response.ok) throw new Error(`Falha ao carregar CSV dos Trilheiros: ${response.status}`);
+  return csvToObjects(await response.text());
+}
+
+function normalizeTrilheirosRows(rows) {
+  if (!rows.length) return [];
+
+  const nameHeader = findHeader(rows, CONFIG.TRILHEIROS_NAME_COLUMN);
+  const emailHeader = findHeader(rows, CONFIG.TRILHEIROS_EMAIL_COLUMN);
+  const birthHeader = findHeader(rows, CONFIG.TRILHEIROS_BIRTH_COLUMN);
+  const trackHeader = findHeader(rows, CONFIG.TRILHEIROS_TRACK_COLUMN);
+  const cityHeader = findHeader(rows, CONFIG.TRILHEIROS_CITY_COLUMN);
+
+  if (!nameHeader || !trackHeader || !cityHeader) {
+    throw new Error("Cabeçalhos obrigatórios da planilha de Trilheiros não foram encontrados.");
+  }
+
+  return rows
+    .map((row, index) => ({
+      id: index + 1,
+      name: String(row[nameHeader] ?? "").trim(),
+      email: emailHeader ? String(row[emailHeader] ?? "").trim() : "",
+      birthDate: birthHeader ? String(row[birthHeader] ?? "").trim() : "",
+      track: String(row[trackHeader] ?? "").trim(),
+      city: String(row[cityHeader] ?? "").trim(),
+    }))
+    .filter((row) => row.name || row.email || row.track || row.city);
+}
+
+function setTrilheirosDataStatus(text, status = "loading") {
+  if (!els.trilheirosDataStatus) return;
+  els.trilheirosDataStatus.textContent = text;
+  els.trilheirosDataStatus.classList.toggle("connected", status === "connected");
+  els.trilheirosDataStatus.classList.toggle("error", status === "error");
+}
+
+function populateTrilheirosFilters() {
+  const tracks = Array.from(new Set(state.trilheirosRows.map((row) => row.track).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const cities = Array.from(new Set(state.trilheirosRows.map((row) => row.city).filter(Boolean)))
+    .sort((a, b) => a.localeCompare(b, "pt-BR"));
+
+  if (els.trilheirosTrackFilter) {
+    els.trilheirosTrackFilter.innerHTML = `<option value="">Todas as trilhas</option>${tracks.map((track) => `<option value="${escapeAttribute(track)}">${escapeHtml(track)}</option>`).join("")}`;
+  }
+  if (els.trilheirosCityFilter) {
+    els.trilheirosCityFilter.innerHTML = `<option value="">Todos os municípios</option>${cities.map((city) => `<option value="${escapeAttribute(city)}">${escapeHtml(city)}</option>`).join("")}`;
+  }
+}
+
+function applyTrilheirosFiltersAndRender() {
+  state.trilheirosFilteredRows = [...state.trilheirosRows];
+  renderTrilheirosKpis();
+  renderTrilheirosMapMarkers();
+  renderTrilheirosSelectedCity();
+}
+
+function renderTrilheirosKpis() {
+  const rows = state.trilheirosFilteredRows;
+  const tracks = new Set(rows.map((row) => row.track).filter(Boolean));
+  const cities = new Set(rows.map((row) => normalizeCityName(row.city)).filter(Boolean));
+  const average = tracks.size ? rows.length / tracks.size : 0;
+
+  if (els.trilheirosTotal) els.trilheirosTotal.textContent = formatNumber(rows.length);
+  if (els.trilheirosTracks) els.trilheirosTracks.textContent = formatNumber(tracks.size);
+  if (els.trilheirosCities) els.trilheirosCities.textContent = formatNumber(cities.size);
+  if (els.trilheirosAverage) {
+    els.trilheirosAverage.textContent = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(average);
+  }
+}
+
+function renderTrilheirosTable() {
+  if (!els.trilheirosTableBody) return;
+  const rows = state.trilheirosFilteredRows;
+  if (els.trilheirosTableCount) {
+    els.trilheirosTableCount.textContent = `${formatNumber(rows.length)} participante${rows.length === 1 ? "" : "s"}`;
+  }
+
+  if (!rows.length) {
+    els.trilheirosTableBody.innerHTML = `<tr><td colspan="5" class="empty-state trilheiros-empty">Nenhum Trilheiro encontrado para os filtros selecionados.</td></tr>`;
+    return;
+  }
+
+  const sorted = [...rows].sort((a, b) => a.name.localeCompare(b.name, "pt-BR"));
+  els.trilheirosTableBody.innerHTML = sorted.map((row) => `
+    <tr>
+      <td><strong class="trilheiro-name">${escapeHtml(row.name || "—")}</strong></td>
+      <td>${escapeHtml(row.email || "—")}</td>
+      <td>${escapeHtml(row.birthDate || "—")}</td>
+      <td><span class="trilheiro-track-pill">${escapeHtml(row.track || "—")}</span></td>
+      <td>${escapeHtml(row.city || "—")}</td>
+    </tr>
+  `).join("");
+}
+
+function renderTrilheirosSelectedCity(cityKey = state.trilheirosSelectedCityKey) {
+  if (!els.trilheirosTrackChart) return;
+
+  if (!cityKey) {
+    if (els.trilheirosCityPanelTitle) els.trilheirosCityPanelTitle.textContent = "Trilhas da cidade";
+    if (els.trilheirosCityPanelSubtitle) els.trilheirosCityPanelSubtitle.textContent = "Selecione uma cidade no mapa para visualizar a distribuição.";
+    els.trilheirosTrackChart.innerHTML = `
+      <div class="trilheiros-placeholder compact city-selection-placeholder">
+        <strong>Selecione uma cidade no mapa</strong>
+        <span>Clique em um marcador para ver em quais trilhas os participantes daquele município foram selecionados.</span>
+      </div>`;
+    return;
+  }
+
+  const cityRows = state.trilheirosRows.filter((row) => {
+    const normalized = normalizeCityName(row.city);
+    const key = ALIASES[normalized] || normalized;
+    return key === cityKey;
+  });
+
+  if (!cityRows.length) {
+    state.trilheirosSelectedCityKey = null;
+    renderTrilheirosSelectedCity(null);
+    return;
+  }
+
+  const info = state.cityIndex.get(cityKey);
+  const cityName = info?.name || cityRows[0]?.city || "Município";
+  const counts = new Map();
+  cityRows.forEach((row) => {
+    const track = row.track || "Trilha não informada";
+    counts.set(track, (counts.get(track) || 0) + 1);
+  });
+
+  const data = Array.from(counts, ([track, count]) => ({ track, count }))
+    .sort((a, b) => b.count - a.count || a.track.localeCompare(b.track, "pt-BR"));
+  const max = Math.max(...data.map((item) => item.count), 1);
+
+  if (els.trilheirosCityPanelTitle) els.trilheirosCityPanelTitle.textContent = cityName;
+  if (els.trilheirosCityPanelSubtitle) {
+    els.trilheirosCityPanelSubtitle.textContent = `${formatNumber(cityRows.length)} trilheiro${cityRows.length === 1 ? "" : "s"} selecionado${cityRows.length === 1 ? "" : "s"} em ${formatNumber(data.length)} trilha${data.length === 1 ? "" : "s"}.`;
+  }
+
+  els.trilheirosTrackChart.innerHTML = `
+    <div class="trilheiros-city-summary">
+      <div><span>Total na cidade</span><strong>${formatNumber(cityRows.length)}</strong></div>
+      <div><span>Trilhas representadas</span><strong>${formatNumber(data.length)}</strong></div>
+    </div>
+    <div class="trilheiros-track-bars">${data.map((item) => `
+      <div class="trilheiros-track-row">
+        <div class="trilheiros-track-row-header">
+          <span title="${escapeAttribute(item.track)}">${escapeHtml(item.track)}</span>
+          <strong>${formatNumber(item.count)}</strong>
+        </div>
+        <div class="trilheiros-track-bar"><span style="width:${Math.max(4, (item.count / max) * 100).toFixed(1)}%"></span></div>
+      </div>
+    `).join("")}</div>`;
+}
+
+function setupTrilheirosMap() {
+  if (state.trilheirosMap || !document.getElementById("trilheiros-map")) return;
+
+  state.trilheirosMap = L.map("trilheiros-map", {
+    zoomControl: true,
+    scrollWheelZoom: true,
+    attributionControl: true,
+  }).setView([-4.8, -45.1], 7);
+
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+    maxZoom: 18,
+    attribution: "&copy; OpenStreetMap contributors",
+  }).addTo(state.trilheirosMap);
+
+  state.trilheirosMarkersLayer = L.markerClusterGroup({
+    showCoverageOnHover: false,
+    spiderfyOnMaxZoom: true,
+    zoomToBoundsOnClick: true,
+    removeOutsideVisibleBounds: true,
+    disableClusteringAtZoom: 8,
+    maxClusterRadius: 55,
+    iconCreateFunction(cluster) {
+      const total = cluster.getAllChildMarkers().reduce((sum, marker) => sum + (marker.options.trilheirosCount || 0), 0);
+      return L.divIcon({
+        html: `<div class="cluster-marker ${getTrilheirosBucket(total)}"><span class="cluster-total">${formatNumber(total)}</span><span class="cluster-meta">trilheiros</span></div>`,
+        className: "cluster-div-icon",
+        iconSize: [64, 64],
+      });
+    },
+  }).addTo(state.trilheirosMap);
+
+  if (state.boundaryLayer) {
+    // O contorno municipal é recriado a partir das features já indexadas para o segundo mapa.
+    const features = Array.from(state.cityIndex.values()).map((info) => info.feature).filter(Boolean);
+    if (features.length) {
+      state.trilheirosBoundaryLayer = L.geoJSON({ type: "FeatureCollection", features }, {
+        interactive: false,
+        style: { color: "#64748b", weight: 0.7, opacity: 0.22, fillOpacity: 0 },
+      }).addTo(state.trilheirosMap);
+    }
+  }
+}
+
+function renderTrilheirosMapMarkers(shouldFit = true) {
+  if (!state.trilheirosMap || !state.trilheirosMarkersLayer) return;
+  state.trilheirosMarkersLayer.clearLayers();
+
+  const counts = new Map();
+  state.trilheirosFilteredRows.forEach((row) => {
+    const normalized = normalizeCityName(row.city);
+    const key = ALIASES[normalized] || normalized;
+    if (!key) return;
+    if (!counts.has(key)) counts.set(key, { count: 0, city: row.city, key });
+    counts.get(key).count += 1;
+  });
+
+  counts.forEach((data, key) => {
+    const info = state.cityIndex.get(key);
+    if (!info) return;
+    const isSelected = state.trilheirosSelectedCityKey === key;
+    const marker = L.marker([info.lat, info.lng], {
+      trilheirosCount: data.count,
+      trilheirosCityKey: key,
+      icon: L.divIcon({
+        html: `
+          <div class="trilheiros-city-marker${isSelected ? " is-active" : ""}">
+            <div class="cluster-marker trilheiros-single-marker ${getTrilheirosBucket(data.count)}">
+              <span class="cluster-total">${formatNumber(data.count)}</span>
+              <span class="cluster-meta">trilheiros</span>
+            </div>
+            <span class="trilheiros-city-label">${escapeHtml(info.name || data.city)}</span>
+          </div>
+        `,
+        className: "trilheiros-city-div-icon",
+        iconSize: [64, 64],
+        iconAnchor: [32, 32],
+      }),
+    });
+    marker.bindTooltip(`<strong>${escapeHtml(info.name || data.city)}</strong><br>${formatNumber(data.count)} trilheiro${data.count === 1 ? "" : "s"}<br><span class="tooltip-hint">Clique para ver as trilhas</span>`, { direction: "top", offset: [0, -34] });
+    marker.on("click", () => {
+      state.trilheirosSelectedCityKey = key;
+      renderTrilheirosSelectedCity(key);
+      renderTrilheirosMapMarkers(false);
+    });
+    state.trilheirosMarkersLayer.addLayer(marker);
+  });
+
+  if (shouldFit) fitTrilheirosMapToMarkers();
+}
+
+function fitTrilheirosMapToMarkers() {
+  if (!state.trilheirosMap || !state.trilheirosMarkersLayer) return;
+  const bounds = state.trilheirosMarkersLayer.getBounds();
+  if (bounds?.isValid?.()) {
+    state.trilheirosMap.fitBounds(bounds.pad(0.14), { maxZoom: 8, animate: false });
+  } else {
+    state.trilheirosMap.setView([-4.8, -45.1], 7, { animate: false });
+  }
+  setTimeout(() => state.trilheirosMap?.invalidateSize({ animate: false }), 40);
+}
+
+function getTrilheirosBucket(count) {
+  if (count >= 40) return "danger";
+  if (count >= 20) return "warning";
+  if (count >= 5) return "notice";
+  return "success";
+}
+
+function updateTrilheirosClearButton() {
+  if (!els.trilheirosClearFilters) return;
+  const hasFilters = Boolean(state.trilheirosSearch || state.trilheirosTrack || state.trilheirosCity);
+  els.trilheirosClearFilters.disabled = !hasFilters;
+}
 
 function findHeader(rows, expectedHeader) {
   if (!rows.length) return null;
